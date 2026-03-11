@@ -1,0 +1,526 @@
+"""
+Particle Data Group (PDG) Particle Catalog
+All values from PDG 2024 Review of Particle Physics
+https://pdg.lbl.gov
+
+Masses in MeV/c^2, lifetimes in seconds, charges in units of |e|.
+Branching ratios are fractions summing to 1.0 per particle.
+"""
+
+INF = float('inf')
+
+# ── particle IDs ──────────────────────────────────────────────────────────
+# Leptons
+ELECTRON      = 0
+POSITRON      = 1
+MUON_MINUS    = 2
+MUON_PLUS     = 3
+TAU_MINUS     = 4
+TAU_PLUS      = 5
+NU_E          = 6
+NU_E_BAR      = 7
+NU_MU         = 8
+NU_MU_BAR     = 9
+NU_TAU        = 10
+NU_TAU_BAR    = 11
+# Gauge bosons + Higgs
+PHOTON        = 12
+W_PLUS        = 13
+W_MINUS       = 14
+Z_ZERO        = 15
+GLUON         = 16
+HIGGS         = 17
+# Mesons
+PI_PLUS       = 18
+PI_MINUS      = 19
+PI_ZERO       = 20
+K_PLUS        = 21
+K_MINUS       = 22
+K_ZERO_S      = 23
+ETA           = 24
+RHO_ZERO      = 25
+# Baryons
+PROTON        = 26
+ANTIPROTON    = 27
+NEUTRON       = 28
+ANTINEUTRON   = 29
+LAMBDA_ZERO   = 30
+SIGMA_PLUS    = 31
+SIGMA_MINUS   = 32
+XI_MINUS      = 33
+OMEGA_MINUS   = 34
+DELTA_PP      = 35
+# Heavy flavour
+JPSI          = 36
+D_ZERO        = 37
+B_PLUS        = 38
+B_ZERO        = 39
+
+NUM_PARTICLES = 40
+NUM_TYPES     = 48   # 8 reserved slots for user-defined particles
+
+# ── unit-conversion constants ─────────────────────────────────────────────
+PROTON_MASS_MEV = 938.27208816
+MASS_SCALE      = 1.0 / PROTON_MASS_MEV   # sim_mass = mass_mev * MASS_SCALE
+LIFETIME_SCALE  = 1.0e-7                  # sim_tau  = lifetime_s / LIFETIME_SCALE
+
+# ── particle database ─────────────────────────────────────────────────────
+# Each entry:  name, symbol, mass_mev, charge_e, spin,
+#              lifetime_s, baryon_num, lepton_num, strangeness,
+#              anti_id (-1 = none in table, same id = self-conjugate),
+#              color (r,g,b), render_radius,
+#              decays: list of (branching_ratio, [product_ids])
+
+PARTICLES = {
+    # ── Leptons ───────────────────────────────────────────────────────────
+    ELECTRON: {
+        "name": "electron", "symbol": "e\u207b",
+        "mass_mev": 0.51099895, "charge_e": -1, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": 1, "strangeness": 0,
+        "anti_id": POSITRON,
+        "color": (1.0, 0.85, 0.15), "radius": 0.05,
+        "decays": [],
+    },
+    POSITRON: {
+        "name": "positron", "symbol": "e\u207a",
+        "mass_mev": 0.51099895, "charge_e": 1, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": -1, "strangeness": 0,
+        "anti_id": ELECTRON,
+        "color": (1.0, 0.75, 0.0), "radius": 0.05,
+        "decays": [],
+    },
+    MUON_MINUS: {
+        "name": "muon", "symbol": "\u03bc\u207b",
+        "mass_mev": 105.6583755, "charge_e": -1, "spin": 0.5,
+        "lifetime_s": 2.1969811e-6, "baryon_num": 0, "lepton_num": 1, "strangeness": 0,
+        "anti_id": MUON_PLUS,
+        "color": (0.85, 0.15, 0.85), "radius": 0.07,
+        "decays": [
+            (1.0, [ELECTRON, NU_E_BAR, NU_MU]),
+        ],
+    },
+    MUON_PLUS: {
+        "name": "anti-muon", "symbol": "\u03bc\u207a",
+        "mass_mev": 105.6583755, "charge_e": 1, "spin": 0.5,
+        "lifetime_s": 2.1969811e-6, "baryon_num": 0, "lepton_num": -1, "strangeness": 0,
+        "anti_id": MUON_MINUS,
+        "color": (0.70, 0.30, 0.90), "radius": 0.07,
+        "decays": [
+            (1.0, [POSITRON, NU_E, NU_MU_BAR]),
+        ],
+    },
+    TAU_MINUS: {
+        "name": "tau", "symbol": "\u03c4\u207b",
+        "mass_mev": 1776.86, "charge_e": -1, "spin": 0.5,
+        "lifetime_s": 2.903e-13, "baryon_num": 0, "lepton_num": 1, "strangeness": 0,
+        "anti_id": TAU_PLUS,
+        "color": (0.60, 0.30, 0.10), "radius": 0.09,
+        "decays": [
+            (0.1782, [ELECTRON, NU_E_BAR, NU_TAU]),
+            (0.1739, [MUON_MINUS, NU_MU_BAR, NU_TAU]),
+            (0.1082, [PI_MINUS, NU_TAU]),
+            (0.2549, [PI_MINUS, PI_ZERO, NU_TAU]),
+            (0.0926, [PI_MINUS, PI_ZERO, PI_ZERO, NU_TAU]),
+            (0.0931, [PI_MINUS, PI_PLUS, PI_MINUS, NU_TAU]),
+            (0.0111, [K_MINUS, NU_TAU]),
+            (0.0880, [K_MINUS, PI_ZERO, NU_TAU]),
+        ],
+    },
+    TAU_PLUS: {
+        "name": "anti-tau", "symbol": "\u03c4\u207a",
+        "mass_mev": 1776.86, "charge_e": 1, "spin": 0.5,
+        "lifetime_s": 2.903e-13, "baryon_num": 0, "lepton_num": -1, "strangeness": 0,
+        "anti_id": TAU_MINUS,
+        "color": (0.70, 0.40, 0.15), "radius": 0.09,
+        "decays": [
+            (0.1782, [POSITRON, NU_E, NU_TAU_BAR]),
+            (0.1739, [MUON_PLUS, NU_MU, NU_TAU_BAR]),
+            (0.1082, [PI_PLUS, NU_TAU_BAR]),
+            (0.2549, [PI_PLUS, PI_ZERO, NU_TAU_BAR]),
+            (0.0926, [PI_PLUS, PI_ZERO, PI_ZERO, NU_TAU_BAR]),
+            (0.0931, [PI_PLUS, PI_MINUS, PI_PLUS, NU_TAU_BAR]),
+            (0.0111, [K_PLUS, NU_TAU_BAR]),
+            (0.0880, [K_PLUS, PI_ZERO, NU_TAU_BAR]),
+        ],
+    },
+    NU_E: {
+        "name": "nu_e", "symbol": "\u03bd\u2091",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": 1, "strangeness": 0,
+        "anti_id": NU_E_BAR,
+        "color": (0.55, 0.55, 0.55), "radius": 0.03,
+        "decays": [],
+    },
+    NU_E_BAR: {
+        "name": "nu_e_bar", "symbol": "\u03bd\u0305\u2091",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": -1, "strangeness": 0,
+        "anti_id": NU_E,
+        "color": (0.50, 0.50, 0.50), "radius": 0.03,
+        "decays": [],
+    },
+    NU_MU: {
+        "name": "nu_mu", "symbol": "\u03bd\u03bc",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": 1, "strangeness": 0,
+        "anti_id": NU_MU_BAR,
+        "color": (0.55, 0.55, 0.55), "radius": 0.03,
+        "decays": [],
+    },
+    NU_MU_BAR: {
+        "name": "nu_mu_bar", "symbol": "\u03bd\u0305\u03bc",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": -1, "strangeness": 0,
+        "anti_id": NU_MU,
+        "color": (0.50, 0.50, 0.50), "radius": 0.03,
+        "decays": [],
+    },
+    NU_TAU: {
+        "name": "nu_tau", "symbol": "\u03bd\u03c4",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": 1, "strangeness": 0,
+        "anti_id": NU_TAU_BAR,
+        "color": (0.55, 0.55, 0.55), "radius": 0.03,
+        "decays": [],
+    },
+    NU_TAU_BAR: {
+        "name": "nu_tau_bar", "symbol": "\u03bd\u0305\u03c4",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": -1, "strangeness": 0,
+        "anti_id": NU_TAU,
+        "color": (0.50, 0.50, 0.50), "radius": 0.03,
+        "decays": [],
+    },
+
+    # ── Gauge Bosons + Higgs ──────────────────────────────────────────────
+    PHOTON: {
+        "name": "photon", "symbol": "\u03b3",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 1.0,
+        "lifetime_s": INF, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": PHOTON,
+        "color": (1.0, 1.0, 1.0), "radius": 0.04,
+        "decays": [],
+    },
+    W_PLUS: {
+        "name": "W+", "symbol": "W\u207a",
+        "mass_mev": 80377.0, "charge_e": 1, "spin": 1.0,
+        "lifetime_s": 3.16e-25, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": W_MINUS,
+        "color": (0.20, 0.40, 1.0), "radius": 0.18,
+        "decays": [
+            (0.1071, [POSITRON, NU_E]),
+            (0.1063, [MUON_PLUS, NU_MU]),
+            (0.1138, [TAU_PLUS, NU_TAU]),
+            (0.6728, [PI_PLUS, PI_ZERO]),       # simplified hadronic (ud_bar, cs_bar)
+        ],
+    },
+    W_MINUS: {
+        "name": "W-", "symbol": "W\u207b",
+        "mass_mev": 80377.0, "charge_e": -1, "spin": 1.0,
+        "lifetime_s": 3.16e-25, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": W_PLUS,
+        "color": (0.30, 0.50, 1.0), "radius": 0.18,
+        "decays": [
+            (0.1071, [ELECTRON, NU_E_BAR]),
+            (0.1063, [MUON_MINUS, NU_MU_BAR]),
+            (0.1138, [TAU_MINUS, NU_TAU_BAR]),
+            (0.6728, [PI_MINUS, PI_ZERO]),
+        ],
+    },
+    Z_ZERO: {
+        "name": "Z0", "symbol": "Z\u2070",
+        "mass_mev": 91187.6, "charge_e": 0, "spin": 1.0,
+        "lifetime_s": 2.64e-25, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": Z_ZERO,
+        "color": (0.15, 0.25, 0.70), "radius": 0.18,
+        "decays": [
+            (0.03363, [POSITRON, ELECTRON]),
+            (0.03366, [MUON_PLUS, MUON_MINUS]),
+            (0.03370, [TAU_PLUS, TAU_MINUS]),
+            (0.2000,  [NU_E, NU_E_BAR]),        # all invisible combined
+            (0.6990,  [PI_PLUS, PI_MINUS]),      # simplified hadronic
+        ],
+    },
+    GLUON: {
+        "name": "gluon", "symbol": "g",
+        "mass_mev": 1e-6, "charge_e": 0, "spin": 1.0,
+        "lifetime_s": 1e-24, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": GLUON,
+        "color": (0.10, 0.80, 0.20), "radius": 0.04,
+        "decays": [
+            (1.0, [PI_PLUS, PI_MINUS]),          # simplified hadronization
+        ],
+    },
+    HIGGS: {
+        "name": "Higgs", "symbol": "H\u2070",
+        "mass_mev": 125250.0, "charge_e": 0, "spin": 0.0,
+        "lifetime_s": 1.56e-22, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": HIGGS,
+        "color": (1.0, 0.85, 0.0), "radius": 0.22,
+        "decays": [
+            (0.5824, [PI_PLUS, PI_MINUS, PI_ZERO]),  # simplified bb_bar -> hadrons
+            (0.2137, [PI_PLUS, PI_MINUS]),            # simplified WW*
+            (0.0815, [PI_PLUS, PI_MINUS]),            # simplified gg
+            (0.0627, [TAU_PLUS, TAU_MINUS]),
+            (0.0262, [POSITRON, ELECTRON]),            # simplified ZZ*
+            (0.0023, [PHOTON, PHOTON]),
+            (0.0312, [K_PLUS, K_MINUS]),              # simplified cc_bar + ss_bar
+        ],
+    },
+
+    # ── Mesons ────────────────────────────────────────────────────────────
+    PI_PLUS: {
+        "name": "pion+", "symbol": "\u03c0\u207a",
+        "mass_mev": 139.57039, "charge_e": 1, "spin": 0.0,
+        "lifetime_s": 2.6033e-8, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": PI_MINUS,
+        "color": (1.0, 0.25, 0.25), "radius": 0.08,
+        "decays": [
+            (0.9999, [MUON_PLUS, NU_MU]),
+            (0.0001, [POSITRON, NU_E]),
+        ],
+    },
+    PI_MINUS: {
+        "name": "pion-", "symbol": "\u03c0\u207b",
+        "mass_mev": 139.57039, "charge_e": -1, "spin": 0.0,
+        "lifetime_s": 2.6033e-8, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": PI_PLUS,
+        "color": (0.25, 0.90, 0.25), "radius": 0.08,
+        "decays": [
+            (0.9999, [MUON_MINUS, NU_MU_BAR]),
+            (0.0001, [ELECTRON, NU_E_BAR]),
+        ],
+    },
+    PI_ZERO: {
+        "name": "pion0", "symbol": "\u03c0\u2070",
+        "mass_mev": 134.9768, "charge_e": 0, "spin": 0.0,
+        "lifetime_s": 8.43e-17, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": PI_ZERO,
+        "color": (0.90, 0.50, 0.50), "radius": 0.08,
+        "decays": [
+            (0.9882, [PHOTON, PHOTON]),
+            (0.0118, [POSITRON, ELECTRON, PHOTON]),
+        ],
+    },
+    K_PLUS: {
+        "name": "kaon+", "symbol": "K\u207a",
+        "mass_mev": 493.677, "charge_e": 1, "spin": 0.0,
+        "lifetime_s": 1.2380e-8, "baryon_num": 0, "lepton_num": 0, "strangeness": 1,
+        "anti_id": K_MINUS,
+        "color": (1.0, 0.55, 0.0), "radius": 0.10,
+        "decays": [
+            (0.6356, [MUON_PLUS, NU_MU]),
+            (0.2067, [PI_PLUS, PI_ZERO]),
+            (0.0559, [PI_PLUS, PI_PLUS, PI_MINUS]),
+            (0.0507, [PI_ZERO, POSITRON, NU_E]),
+            (0.0511, [PI_ZERO, MUON_PLUS, NU_MU]),
+        ],
+    },
+    K_MINUS: {
+        "name": "kaon-", "symbol": "K\u207b",
+        "mass_mev": 493.677, "charge_e": -1, "spin": 0.0,
+        "lifetime_s": 1.2380e-8, "baryon_num": 0, "lepton_num": 0, "strangeness": -1,
+        "anti_id": K_PLUS,
+        "color": (0.0, 0.80, 0.60), "radius": 0.10,
+        "decays": [
+            (0.6356, [MUON_MINUS, NU_MU_BAR]),
+            (0.2067, [PI_MINUS, PI_ZERO]),
+            (0.0559, [PI_MINUS, PI_MINUS, PI_PLUS]),
+            (0.0507, [PI_ZERO, ELECTRON, NU_E_BAR]),
+            (0.0511, [PI_ZERO, MUON_MINUS, NU_MU_BAR]),
+        ],
+    },
+    K_ZERO_S: {
+        "name": "K-short", "symbol": "K\u2070s",
+        "mass_mev": 497.611, "charge_e": 0, "spin": 0.0,
+        "lifetime_s": 8.954e-11, "baryon_num": 0, "lepton_num": 0, "strangeness": 1,
+        "anti_id": K_ZERO_S,
+        "color": (0.80, 0.65, 0.20), "radius": 0.10,
+        "decays": [
+            (0.6920, [PI_PLUS, PI_MINUS]),
+            (0.3080, [PI_ZERO, PI_ZERO]),
+        ],
+    },
+    ETA: {
+        "name": "eta", "symbol": "\u03b7",
+        "mass_mev": 547.862, "charge_e": 0, "spin": 0.0,
+        "lifetime_s": 5.02e-19, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": ETA,
+        "color": (0.90, 0.60, 0.40), "radius": 0.10,
+        "decays": [
+            (0.3941, [PHOTON, PHOTON]),
+            (0.3268, [PI_ZERO, PI_ZERO, PI_ZERO]),
+            (0.2292, [PI_PLUS, PI_MINUS, PI_ZERO]),
+            (0.0499, [PI_PLUS, PI_MINUS, PHOTON]),
+        ],
+    },
+    RHO_ZERO: {
+        "name": "rho0", "symbol": "\u03c1\u2070",
+        "mass_mev": 775.26, "charge_e": 0, "spin": 1.0,
+        "lifetime_s": 4.45e-24, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": RHO_ZERO,
+        "color": (0.70, 0.30, 0.30), "radius": 0.10,
+        "decays": [
+            (1.0, [PI_PLUS, PI_MINUS]),
+        ],
+    },
+
+    # ── Baryons ───────────────────────────────────────────────────────────
+    PROTON: {
+        "name": "proton", "symbol": "p",
+        "mass_mev": 938.27208816, "charge_e": 1, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": 1, "lepton_num": 0, "strangeness": 0,
+        "anti_id": ANTIPROTON,
+        "color": (0.25, 0.55, 1.0), "radius": 0.12,
+        "decays": [],
+    },
+    ANTIPROTON: {
+        "name": "anti-proton", "symbol": "p\u0305",
+        "mass_mev": 938.27208816, "charge_e": -1, "spin": 0.5,
+        "lifetime_s": INF, "baryon_num": -1, "lepton_num": 0, "strangeness": 0,
+        "anti_id": PROTON,
+        "color": (1.0, 0.40, 0.40), "radius": 0.12,
+        "decays": [],
+    },
+    NEUTRON: {
+        "name": "neutron", "symbol": "n",
+        "mass_mev": 939.56542052, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": 878.4, "baryon_num": 1, "lepton_num": 0, "strangeness": 0,
+        "anti_id": ANTINEUTRON,
+        "color": (0.60, 0.60, 0.60), "radius": 0.12,
+        "decays": [
+            (1.0, [PROTON, ELECTRON, NU_E_BAR]),
+        ],
+    },
+    ANTINEUTRON: {
+        "name": "anti-neutron", "symbol": "n\u0305",
+        "mass_mev": 939.56542052, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": 878.4, "baryon_num": -1, "lepton_num": 0, "strangeness": 0,
+        "anti_id": NEUTRON,
+        "color": (0.70, 0.55, 0.55), "radius": 0.12,
+        "decays": [
+            (1.0, [ANTIPROTON, POSITRON, NU_E]),
+        ],
+    },
+    LAMBDA_ZERO: {
+        "name": "Lambda", "symbol": "\u039b\u2070",
+        "mass_mev": 1115.683, "charge_e": 0, "spin": 0.5,
+        "lifetime_s": 2.631e-10, "baryon_num": 1, "lepton_num": 0, "strangeness": -1,
+        "anti_id": -1,
+        "color": (0.0, 0.80, 0.80), "radius": 0.13,
+        "decays": [
+            (0.639, [PROTON, PI_MINUS]),
+            (0.361, [NEUTRON, PI_ZERO]),
+        ],
+    },
+    SIGMA_PLUS: {
+        "name": "Sigma+", "symbol": "\u03a3\u207a",
+        "mass_mev": 1189.37, "charge_e": 1, "spin": 0.5,
+        "lifetime_s": 8.018e-11, "baryon_num": 1, "lepton_num": 0, "strangeness": -1,
+        "anti_id": -1,
+        "color": (0.20, 0.70, 0.70), "radius": 0.13,
+        "decays": [
+            (0.5157, [PROTON, PI_ZERO]),
+            (0.4843, [NEUTRON, PI_PLUS]),
+        ],
+    },
+    SIGMA_MINUS: {
+        "name": "Sigma-", "symbol": "\u03a3\u207b",
+        "mass_mev": 1197.449, "charge_e": -1, "spin": 0.5,
+        "lifetime_s": 1.479e-10, "baryon_num": 1, "lepton_num": 0, "strangeness": -1,
+        "anti_id": -1,
+        "color": (0.30, 0.65, 0.70), "radius": 0.13,
+        "decays": [
+            (1.0, [NEUTRON, PI_MINUS]),
+        ],
+    },
+    XI_MINUS: {
+        "name": "Xi-", "symbol": "\u039e\u207b",
+        "mass_mev": 1321.71, "charge_e": -1, "spin": 0.5,
+        "lifetime_s": 1.639e-10, "baryon_num": 1, "lepton_num": 0, "strangeness": -2,
+        "anti_id": -1,
+        "color": (0.0, 0.60, 0.60), "radius": 0.13,
+        "decays": [
+            (1.0, [LAMBDA_ZERO, PI_MINUS]),
+        ],
+    },
+    OMEGA_MINUS: {
+        "name": "Omega-", "symbol": "\u03a9\u207b",
+        "mass_mev": 1672.45, "charge_e": -1, "spin": 1.5,
+        "lifetime_s": 8.21e-11, "baryon_num": 1, "lepton_num": 0, "strangeness": -3,
+        "anti_id": -1,
+        "color": (0.10, 0.50, 0.70), "radius": 0.14,
+        "decays": [
+            (0.678, [LAMBDA_ZERO, K_MINUS]),
+            (0.322, [XI_MINUS, PI_ZERO]),
+        ],
+    },
+    DELTA_PP: {
+        "name": "Delta++", "symbol": "\u0394\u207a\u207a",
+        "mass_mev": 1232.0, "charge_e": 2, "spin": 1.5,
+        "lifetime_s": 5.63e-24, "baryon_num": 1, "lepton_num": 0, "strangeness": 0,
+        "anti_id": -1,
+        "color": (0.40, 0.40, 1.0), "radius": 0.13,
+        "decays": [
+            (1.0, [PROTON, PI_PLUS]),
+        ],
+    },
+
+    # ── Heavy flavour ─────────────────────────────────────────────────────
+    JPSI: {
+        "name": "J/psi", "symbol": "J/\u03c8",
+        "mass_mev": 3096.900, "charge_e": 0, "spin": 1.0,
+        "lifetime_s": 7.09e-21, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": JPSI,
+        "color": (0.60, 0.10, 0.60), "radius": 0.14,
+        "decays": [
+            (0.0597, [POSITRON, ELECTRON]),
+            (0.0596, [MUON_PLUS, MUON_MINUS]),
+            (0.8807, [PI_PLUS, PI_MINUS, PI_ZERO]),  # simplified hadronic
+        ],
+    },
+    D_ZERO: {
+        "name": "D0", "symbol": "D\u2070",
+        "mass_mev": 1864.84, "charge_e": 0, "spin": 0.0,
+        "lifetime_s": 4.101e-13, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": -1,
+        "color": (0.50, 0.20, 0.50), "radius": 0.14,
+        "decays": [
+            (0.0393, [K_MINUS, PI_PLUS]),
+            (0.1400, [K_MINUS, PI_PLUS, PI_ZERO]),
+            (0.8207, [PI_PLUS, PI_MINUS, PI_ZERO]),  # simplified remaining
+        ],
+    },
+    B_PLUS: {
+        "name": "B+", "symbol": "B\u207a",
+        "mass_mev": 5279.34, "charge_e": 1, "spin": 0.0,
+        "lifetime_s": 1.638e-12, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": -1,
+        "color": (0.40, 0.15, 0.40), "radius": 0.15,
+        "decays": [
+            (0.001,  [JPSI, K_PLUS]),
+            (0.999,  [PI_PLUS, PI_ZERO, PI_ZERO]),   # simplified hadronic
+        ],
+    },
+    B_ZERO: {
+        "name": "B0", "symbol": "B\u2070",
+        "mass_mev": 5279.66, "charge_e": 0, "spin": 0.0,
+        "lifetime_s": 1.519e-12, "baryon_num": 0, "lepton_num": 0, "strangeness": 0,
+        "anti_id": -1,
+        "color": (0.35, 0.10, 0.35), "radius": 0.15,
+        "decays": [
+            (0.001,  [JPSI, K_ZERO_S]),
+            (0.999,  [PI_PLUS, PI_MINUS, PI_ZERO]),   # simplified hadronic
+        ],
+    },
+}
+
+# ── Collision rules ───────────────────────────────────────────────────────
+# 1 = annihilate to photons,  2 = annihilate to pions,  3 = collision-induced decay
+COLLISION_RULES = {
+    (ELECTRON,    POSITRON):    1,
+    (MUON_MINUS,  MUON_PLUS):   1,
+    (PROTON,      ANTIPROTON):  2,
+    (NEUTRON,     ANTINEUTRON): 2,
+    (PI_PLUS,     PI_MINUS):    3,
+}

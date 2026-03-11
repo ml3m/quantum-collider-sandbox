@@ -5,11 +5,18 @@ from config import (
     WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
     CAMERA_POS, CAMERA_LOOKAT, CAMERA_FOV,
     BASE_PARTICLE_RADIUS, PARTICLE_RADIUS_SCALE,
-    PARTICLE_TYPES, TRAIL_LENGTH, MAX_PARTICLES, NUM_TYPES,
+    TRAIL_LENGTH, MAX_PARTICLES, NUM_TYPES,
     DT, SUBSTEPS, COULOMB_K, GRAVITY_G, MAGNETIC_FIELD, E_FIELD,
     STRONG_FORCE_K, STRONG_FORCE_RANGE, SPEED_OF_LIGHT,
     USE_RELATIVITY, SYNCHROTRON_COEFF, PAIR_CREATION_THRESHOLD,
-    BOUNDARY_MODE, BOUNDARY_SIZE,
+    BOUNDARY_MODE, BOUNDARY_SIZE, BH_MASS,
+)
+from pdg_table import (
+    PARTICLES as PDG_PARTICLES, NUM_PARTICLES,
+    PROTON, ANTIPROTON, NEUTRON, ELECTRON, POSITRON,
+    MUON_MINUS, MUON_PLUS, PI_PLUS, PI_MINUS, PI_ZERO,
+    K_PLUS, K_MINUS, PHOTON, LAMBDA_ZERO, DELTA_PP,
+    W_PLUS, W_MINUS, Z_ZERO, HIGGS, TAU_MINUS, TAU_PLUS,
 )
 import simulation as sim
 
@@ -48,13 +55,13 @@ class Renderer:
         self.particle_size = BASE_PARTICLE_RADIUS
         self.trail_width = 1.5
 
-        self.spawn_type = 0
+        self.spawn_type = PROTON
         self.spawn_mass_mult = 1.0
         self.spawn_charge_mult = 1.0
         self.spawn_speed = 3.0
 
         self.gun_enabled = False
-        self.gun_type = 0
+        self.gun_type = PROTON
         self.gun_speed = 5.0
         self.gun_spread = 0.3
         self.gun_rate = 10.0
@@ -64,8 +71,22 @@ class Renderer:
 
         self.selected_particle = 0
 
+        self.bh_enabled = False
+        self.bh_mass = BH_MASS
+        self.bh_x, self.bh_y, self.bh_z = 0.0, 0.0, 0.0
+        self._bh_ring_dirty = True
+        self._disk_initialized = False
+
+        sim.init_bg_stars()
+
         self.boundary_modes = ["reflect", "periodic", "none"]
-        self.type_names = [PARTICLE_TYPES[i]["name"] for i in range(NUM_TYPES)]
+
+        self.type_names = []
+        for i in range(NUM_TYPES):
+            p = PDG_PARTICLES.get(i)
+            self.type_names.append(p["name"] if p else f"rsv_{i}")
+
+        self._spawn_ids = sorted(PDG_PARTICLES.keys())
 
         self.last_time = time.time()
         self.fps = 0.0
@@ -98,6 +119,9 @@ class Renderer:
                 if idx < sim.num_active[None]:
                     current = sim.frozen[idx]
                     sim.frozen[idx] = 0 if current else 1
+            elif key == 'b':
+                self.bh_enabled = not self.bh_enabled
+                self._bh_ring_dirty = True
             elif key == '1':
                 self._preset_rutherford()
             elif key == '2':
@@ -106,6 +130,12 @@ class Renderer:
                 self._preset_gas()
             elif key == '4':
                 self._preset_two_beam()
+            elif key == '5':
+                self._preset_black_hole()
+            elif key == '6':
+                self._preset_lhc_pp()
+            elif key == '7':
+                self._preset_ee_annihilation()
 
     def fire_gun(self, real_dt):
         if not self.gun_enabled:
@@ -130,20 +160,20 @@ class Renderer:
         self._setup_demo()
 
     def _trigger_collision_demo(self):
-        sim.add_particle((-5.0, 0.0, 0.0), (4.0, 0.1, 0.0), 7)
-        sim.add_particle((5.0, 0.0, 0.0), (-4.0, -0.1, 0.0), 7)
+        sim.add_particle((-5.0, 0.0, 0.0), (6.0, 0.1, 0.0), PROTON)
+        sim.add_particle((5.0, 0.0, 0.0), (-6.0, -0.1, 0.0), ANTIPROTON)
 
     def _setup_demo(self):
-        sim.add_particle((-3.5, 0.0, 0.0), (3.0, 0.3, 0.0), 7)
-        sim.add_particle((3.5, 0.0, 0.0), (-3.0, -0.3, 0.0), 7)
-        sim.add_particle((0.0, 3.5, 0.0), (-1.2, -1.8, 0.0), 0)
-        sim.add_particle((0.0, -3.5, 0.0), (1.2, 1.8, 0.0), 0)
-        sim.add_particle((3.0, 3.0, 0.0), (-2.0, -1.0, 0.5), 2)
-        sim.add_particle((-3.0, -3.0, 0.0), (2.0, 1.0, -0.5), 3)
-        sim.add_particle((1.5, -2.0, 1.0), (-0.8, 1.5, -0.4), 4)
-        sim.add_particle((-1.5, 2.0, -1.0), (0.8, -1.5, 0.4), 5)
-        sim.add_particle((4.0, 1.0, 0.5), (-1.5, -0.5, 0.0), 1)
-        sim.add_particle((-4.0, -1.0, -0.5), (1.5, 0.5, 0.0), 9)
+        sim.add_particle((-3.5, 0.0, 0.0), (3.0, 0.3, 0.0), PROTON)
+        sim.add_particle((3.5, 0.0, 0.0), (-3.0, -0.3, 0.0), ANTIPROTON)
+        sim.add_particle((0.0, 3.5, 0.0), (-1.2, -1.8, 0.0), PROTON)
+        sim.add_particle((0.0, -3.5, 0.0), (1.2, 1.8, 0.0), NEUTRON)
+        sim.add_particle((3.0, 3.0, 0.0), (-2.0, -1.0, 0.5), PI_PLUS)
+        sim.add_particle((-3.0, -3.0, 0.0), (2.0, 1.0, -0.5), PI_MINUS)
+        sim.add_particle((1.5, -2.0, 1.0), (-0.8, 1.5, -0.4), K_PLUS)
+        sim.add_particle((-1.5, 2.0, -1.0), (0.8, -1.5, 0.4), MUON_MINUS)
+        sim.add_particle((4.0, 1.0, 0.5), (-1.5, -0.5, 0.0), ELECTRON)
+        sim.add_particle((-4.0, -1.0, -0.5), (1.5, 0.5, 0.0), POSITRON)
 
     def _preset_rutherford(self):
         sim.init_simulation()
@@ -151,23 +181,24 @@ class Renderer:
         self.gravity_g = 0.0
         self.mag_x = self.mag_y = self.mag_z = 0.0
         self.strong_k = 0.0
-        sim.add_particle((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 7, is_frozen=True)
+        sim.add_particle((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), DELTA_PP, is_frozen=True)
         for i in range(8):
             y = -3.0 + i * 0.8
-            sim.add_particle((-8.0, y, 0.0), (5.0, 0.0, 0.0), 0)
+            sim.add_particle((-8.0, y, 0.0), (5.0, 0.0, 0.0), PROTON)
 
     def _preset_cyclotron(self):
+        import math
         sim.init_simulation()
         self.coulomb_k = 0.0
         self.gravity_g = 0.0
         self.mag_x = 0.0; self.mag_y = 0.0; self.mag_z = 8.0
         self.strong_k = 0.0
+        types = [ELECTRON, POSITRON, MUON_MINUS, MUON_PLUS, PI_PLUS, PI_MINUS]
         for i in range(6):
             angle = i * 1.047
-            import math
             vx = math.cos(angle) * 4.0
             vy = math.sin(angle) * 4.0
-            sim.add_particle((0.0, 0.0, 0.0), (vx, vy, 0.0), i % 5)
+            sim.add_particle((0.0, 0.0, 0.0), (vx, vy, 0.0), types[i % len(types)])
 
     def _preset_gas(self):
         sim.init_simulation()
@@ -175,8 +206,9 @@ class Renderer:
         self.gravity_g = 2.0
         self.mag_x = self.mag_y = self.mag_z = 0.0
         self.boundary_size = 8.0
+        types = [PROTON, ELECTRON, PI_PLUS, PI_MINUS, NEUTRON]
         for _ in range(60):
-            tid = random.choice([0, 1, 2, 3, 8])
+            tid = random.choice(types)
             px = random.uniform(-5, 5)
             py = random.uniform(-5, 5)
             pz = random.uniform(-3, 3)
@@ -185,6 +217,43 @@ class Renderer:
             vz = random.uniform(-1, 1)
             sim.add_particle((px, py, pz), (vx, vy, vz), tid)
 
+    def _preset_black_hole(self):
+        import math
+        sim.init_simulation()
+        self.bh_enabled = True
+        self.bh_mass = 300.0
+        self.bh_x, self.bh_y, self.bh_z = 0.0, 0.0, 0.0
+        self._bh_ring_dirty = True
+        self._disk_initialized = False
+        self.coulomb_k = 0.0
+        self.gravity_g = 0.0
+        self.mag_x = self.mag_y = self.mag_z = 0.0
+        self.strong_k = 0.0
+        self.use_relativity = True
+        bh_rs = 2.0 * self.bh_mass / (self.c_light * self.c_light)
+        r_isco = 3.0 * bh_rs
+        r_orbit = r_isco * 1.5
+        orbit_types = [PROTON, ELECTRON, PI_PLUS, PI_MINUS, K_PLUS, MUON_MINUS,
+                        NEUTRON, POSITRON, K_MINUS, MUON_PLUS, PHOTON, PI_ZERO]
+        for i in range(12):
+            angle = i * math.pi * 2.0 / 12
+            px = r_orbit * math.cos(angle)
+            pz = r_orbit * math.sin(angle)
+            v_circ = math.sqrt(self.bh_mass * r_orbit) / (r_orbit - bh_rs)
+            vx = -v_circ * math.sin(angle)
+            vz = v_circ * math.cos(angle)
+            sim.add_particle((px, 0.0, pz), (vx, 0.0, vz), orbit_types[i])
+        far_types = [PROTON, ELECTRON, PI_PLUS, K_PLUS, NEUTRON, PI_MINUS, MUON_MINUS, POSITRON]
+        for i in range(8):
+            angle = i * math.pi * 2.0 / 8
+            r_far = r_orbit * 2.5
+            px = r_far * math.cos(angle)
+            pz = r_far * math.sin(angle)
+            v_circ = math.sqrt(self.bh_mass * r_far) / (r_far - bh_rs)
+            vx = -v_circ * math.sin(angle) * 0.7
+            vz = v_circ * math.cos(angle) * 0.7
+            sim.add_particle((px, 0.0, pz), (vx, 0.0, vz), far_types[i])
+
     def _preset_two_beam(self):
         sim.init_simulation()
         self.coulomb_k = 30.0
@@ -192,8 +261,38 @@ class Renderer:
         self.gun_enabled = False
         for i in range(10):
             y = -2.0 + i * 0.4
-            sim.add_particle((-7.0, y, 0.0), (6.0, 0.0, 0.0), 0)
-            sim.add_particle((7.0, -y, 0.0), (-6.0, 0.0, 0.0), 0)
+            sim.add_particle((-7.0, y, 0.0), (6.0, 0.0, 0.0), PROTON)
+            sim.add_particle((7.0, -y, 0.0), (-6.0, 0.0, 0.0), PROTON)
+
+    def _preset_lhc_pp(self):
+        """LHC-style proton-proton head-on collision."""
+        import math
+        sim.init_simulation()
+        self.coulomb_k = 5.0
+        self.gravity_g = 0.0
+        self.strong_k = 20.0
+        self.strong_range = 1.5
+        self.use_relativity = True
+        self.mag_x = self.mag_y = self.mag_z = 0.0
+        speed = self.c_light * 0.85
+        for i in range(6):
+            y = -1.0 + i * 0.4
+            sim.add_particle((-6.0, y, 0.0), (speed, 0.0, 0.0), PROTON)
+            sim.add_particle((6.0, -y, 0.0), (-speed, 0.0, 0.0), PROTON)
+
+    def _preset_ee_annihilation(self):
+        """Electron-positron annihilation."""
+        sim.init_simulation()
+        self.coulomb_k = 15.0
+        self.gravity_g = 0.0
+        self.strong_k = 0.0
+        self.use_relativity = True
+        self.mag_x = self.mag_y = self.mag_z = 0.0
+        speed = self.c_light * 0.7
+        for i in range(5):
+            y = -1.0 + i * 0.5
+            sim.add_particle((-6.0, y, 0.0), (speed, 0.0, 0.0), ELECTRON)
+            sim.add_particle((6.0, -y, 0.0), (-speed, 0.0, 0.0), POSITRON)
 
     def draw_gui(self):
         st = sim.cached_stats
@@ -228,8 +327,29 @@ class Renderer:
             self.particle_size = w.slider_float("P.Size", self.particle_size, 0.02, 0.3)
             self.trail_width = w.slider_float("Trail W", self.trail_width, 0.5, 5.0)
 
-        with self.gui.sub_window("Spawn", 0.003, 0.72, 0.20, 0.27) as w:
-            self.spawn_type = w.slider_int("Type", self.spawn_type, 0, NUM_TYPES - 1)
+        with self.gui.sub_window("Black Hole", 0.003, 0.72, 0.20, 0.17) as w:
+            bh_int = w.slider_int("BH On", 1 if self.bh_enabled else 0, 0, 1)
+            old_bh = self.bh_enabled
+            self.bh_enabled = bh_int == 1
+            old_mass = self.bh_mass
+            self.bh_mass = w.slider_float("BH Mass", self.bh_mass, 10.0, 2000.0)
+            old_x, old_y, old_z = self.bh_x, self.bh_y, self.bh_z
+            self.bh_x = w.slider_float("BH X", self.bh_x, -15.0, 15.0)
+            self.bh_y = w.slider_float("BH Y", self.bh_y, -15.0, 15.0)
+            bh_rs = 2.0 * self.bh_mass / (self.c_light * self.c_light)
+            r_isco = 3.0 * bh_rs
+            w.text(f"r_s={bh_rs:.3f}  ISCO={r_isco:.3f}")
+            w.text(f"Captures: {st.get('bh_captures', 0)}")
+            if (self.bh_enabled != old_bh or self.bh_mass != old_mass
+                    or self.bh_x != old_x or self.bh_y != old_y
+                    or self.bh_z != old_z):
+                self._bh_ring_dirty = True
+                self._disk_initialized = False
+
+        with self.gui.sub_window("Spawn", 0.003, 0.90, 0.20, 0.095) as w:
+            spawn_idx = self._spawn_ids.index(self.spawn_type) if self.spawn_type in self._spawn_ids else 0
+            spawn_idx = w.slider_int("Type", spawn_idx, 0, len(self._spawn_ids) - 1)
+            self.spawn_type = self._spawn_ids[spawn_idx]
             w.text(f"  [{self.type_names[self.spawn_type]}]")
             self.spawn_speed = w.slider_float("Speed", self.spawn_speed, 0.0, 25.0)
             if w.button("Spawn 1"):
@@ -278,17 +398,31 @@ class Renderer:
             tn = self.type_names[sel_t] if 0 <= sel_t < NUM_TYPES and st.get('particles', 0) > 0 else "---"
             frz = "FROZEN" if st.get('sel_frozen', 0) else ""
             w.text(f"Type: {tn}  {frz}")
-            w.text(f"m={st.get('sel_mass',0):.3f}  q={st.get('sel_charge',0):.1f}")
+            w.text(f"m={st.get('sel_mass',0):.4f}  q={st.get('sel_charge',0):.0f}")
             w.text(f"pos: ({st.get('sel_px',0):.1f},{st.get('sel_py',0):.1f},{st.get('sel_pz',0):.1f})")
             w.text(f"spd: {st.get('sel_speed',0):.2f}  KE: {st.get('sel_ke',0):.3f}")
+            pdg_info = PDG_PARTICLES.get(sel_t)
+            if pdg_info and st.get('particles', 0) > 0:
+                sp = pdg_info["spin"]
+                bn = pdg_info["baryon_num"]
+                ln = pdg_info["lepton_num"]
+                ss = pdg_info["strangeness"]
+                w.text(f"spin={sp}  B={bn} L={ln} S={ss}")
+                lt = pdg_info["lifetime_s"]
+                mass_mev = pdg_info["mass_mev"]
+                lt_str = "stable" if lt > 1e20 else f"{lt:.2e}s"
+                w.text(f"{mass_mev:.2f} MeV  {lt_str}")
 
         with self.gui.sub_window("Gun/Presets", 0.795, 0.83, 0.202, 0.165) as w:
             gun_int = w.slider_int("Gun", 1 if self.gun_enabled else 0, 0, 1)
             self.gun_enabled = gun_int == 1
-            self.gun_type = w.slider_int("G.Type", self.gun_type, 0, NUM_TYPES - 1)
+            gun_idx = self._spawn_ids.index(self.gun_type) if self.gun_type in self._spawn_ids else 0
+            gun_idx = w.slider_int("G.Type", gun_idx, 0, len(self._spawn_ids) - 1)
+            self.gun_type = self._spawn_ids[gun_idx]
             self.gun_speed = w.slider_float("G.Spd", self.gun_speed, 1.0, 20.0)
             self.gun_rate = w.slider_float("G.Rate", self.gun_rate, 1.0, 60.0)
-            w.text("Presets: 1=Ruth 2=Cycl 3=Gas 4=Beam")
+            w.text("1=Ruth 2=Cycl 3=Gas 4=Beam")
+            w.text("5=BH 6=LHC 7=e+e-")
 
     def render(self):
         self.frame_count += 1
@@ -307,13 +441,44 @@ class Renderer:
         self.scene.point_light(pos=(8, 8, 15), color=(1.0, 0.95, 0.9))
         self.scene.point_light(pos=(-8, -5, -10), color=(0.3, 0.3, 0.5))
 
-        sim.prepare_render(self.particle_size, PARTICLE_RADIUS_SCALE)
+        bh_rs = 2.0 * self.bh_mass / (self.c_light * self.c_light) if self.bh_enabled else 0.0
+        bh_pos_tup = (self.bh_x, self.bh_y, self.bh_z)
+        sim.prepare_render(self.particle_size, PARTICLE_RADIUS_SCALE,
+                           self.bh_enabled, bh_rs, bh_pos_tup)
+
+        self.scene.particles(
+            sim.star_pos, radius=0.06,
+            per_vertex_color=sim.star_color, index_count=sim.NUM_BG_STARS,
+        )
 
         rc = sim.render_count[None]
         if rc > 0:
             self.scene.particles(
                 sim.render_pos, radius=self.particle_size,
                 per_vertex_color=sim.render_color, index_count=rc,
+            )
+
+        if self.bh_enabled:
+            if self._bh_ring_dirty:
+                sim.build_bh_ring(self.bh_x, self.bh_y, self.bh_z, bh_rs)
+                self._bh_ring_dirty = False
+            if not self._disk_initialized:
+                sim.init_accretion_disk(
+                    self.bh_x, self.bh_y, self.bh_z, self.bh_gm, bh_rs)
+                self._disk_initialized = True
+
+            r_shadow = sim.BH_SHADOW_FACTOR * bh_rs
+            self.scene.particles(
+                sim.bh_eh_pos, radius=max(r_shadow, 0.08),
+                per_vertex_color=sim.bh_eh_color, index_count=1,
+            )
+            self.scene.particles(
+                sim.bh_ring_pos, radius=bh_rs * 0.15 + 0.015,
+                per_vertex_color=sim.bh_ring_color, index_count=sim.BH_RING_N,
+            )
+            self.scene.particles(
+                sim.disk_pos, radius=bh_rs * 0.18 + 0.02,
+                per_vertex_color=sim.disk_color, index_count=sim.DISK_N,
             )
 
         if self.show_flashes:
@@ -353,3 +518,15 @@ class Renderer:
     @property
     def e_field(self):
         return (self.ex, self.ey, self.ez)
+
+    @property
+    def bh_gm(self):
+        return self.bh_mass
+
+    @property
+    def bh_rs(self):
+        return 2.0 * self.bh_mass / (self.c_light * self.c_light) if self.c_light > 0 else 0.0
+
+    @property
+    def bh_pos(self):
+        return (self.bh_x, self.bh_y, self.bh_z)

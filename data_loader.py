@@ -5,15 +5,20 @@ from particles import get_type_id_by_name
 
 PDG_TO_TYPE = {
     2212: "proton",
+    -2212: "anti-proton",
     11: "electron",
-    -11: "electron",
+    -11: "positron",
     211: "pion+",
     -211: "pion-",
-    321: "kaon",
-    -321: "kaon",
+    111: "pion0",
+    321: "kaon+",
+    -321: "kaon-",
     13: "muon",
-    -13: "muon",
+    -13: "anti-muon",
     22: "photon",
+    2112: "neutron",
+    -2112: "anti-neutron",
+    3122: "Lambda",
 }
 
 

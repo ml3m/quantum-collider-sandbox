@@ -2,18 +2,22 @@
 """
 Quantum Collider Sandbox - Real-Time GPU Particle Physics Simulation
 
+PDG-accurate particle catalog with 40 observable particles, real masses,
+lifetimes, decay channels with proper relativistic kinematics.
+
 Usage:
-    python main.py                     Default demo (head-on collision scenario)
+    python main.py                     Default demo
     python main.py --particles 100     Start with N random particles
     python main.py --data event.h5     Load particles from HDF5 file
 
 Controls:
     SPACE       Pause / Resume
     R           Reset to demo state
-    C           Spawn head-on collision (two heavy_x)
+    C           Spawn p + p-bar collision
     T           Toggle trails
     F           Toggle collision flashes
     E           Export state + time series to HDF5
+    B           Toggle black hole
     G           Toggle particle gun
     TAB         Cycle inspector to next particle
     P           Pin/freeze selected particle
@@ -21,6 +25,9 @@ Controls:
     2           Preset: Cyclotron (magnetic field spirals)
     3           Preset: Random gas with gravity
     4           Preset: Two-beam collision
+    5           Preset: Black hole orbits
+    6           Preset: LHC pp collision
+    7           Preset: e+e- annihilation
     RMB+drag    Orbit camera
     Scroll      Zoom
     ESC         Quit
@@ -34,26 +41,28 @@ import taichi as ti
 ti.init(arch=ti.vulkan)
 
 from particles import load_particle_data
-from simulation import init_simulation, add_particle, step, do_maintenance, refresh_stats
+from simulation import (init_simulation, add_particle, step, do_maintenance,
+                        refresh_stats, update_accretion_disk)
 from renderer import Renderer
-from config import PARTICLE_TYPES
+from pdg_table import PARTICLES as PDG_PARTICLES, PROTON, ANTIPROTON, NEUTRON, \
+    ELECTRON, POSITRON, PI_PLUS, PI_MINUS, K_PLUS, MUON_MINUS
 
 
 def setup_demo():
-    add_particle((-3.5, 0.0, 0.0), (3.0, 0.3, 0.0), 7)
-    add_particle((3.5, 0.0, 0.0), (-3.0, -0.3, 0.0), 7)
-    add_particle((0.0, 3.5, 0.0), (-1.2, -1.8, 0.0), 0)
-    add_particle((0.0, -3.5, 0.0), (1.2, 1.8, 0.0), 0)
-    add_particle((3.0, 3.0, 0.0), (-2.0, -1.0, 0.5), 2)
-    add_particle((-3.0, -3.0, 0.0), (2.0, 1.0, -0.5), 3)
-    add_particle((1.5, -2.0, 1.0), (-0.8, 1.5, -0.4), 4)
-    add_particle((-1.5, 2.0, -1.0), (0.8, -1.5, 0.4), 5)
-    add_particle((4.0, 1.0, 0.5), (-1.5, -0.5, 0.0), 1)
-    add_particle((-4.0, -1.0, -0.5), (1.5, 0.5, 0.0), 9)
+    add_particle((-3.5, 0.0, 0.0), (3.0, 0.3, 0.0), PROTON)
+    add_particle((3.5, 0.0, 0.0), (-3.0, -0.3, 0.0), ANTIPROTON)
+    add_particle((0.0, 3.5, 0.0), (-1.2, -1.8, 0.0), PROTON)
+    add_particle((0.0, -3.5, 0.0), (1.2, 1.8, 0.0), NEUTRON)
+    add_particle((3.0, 3.0, 0.0), (-2.0, -1.0, 0.5), PI_PLUS)
+    add_particle((-3.0, -3.0, 0.0), (2.0, 1.0, -0.5), PI_MINUS)
+    add_particle((1.5, -2.0, 1.0), (-0.8, 1.5, -0.4), K_PLUS)
+    add_particle((-1.5, 2.0, -1.0), (0.8, -1.5, 0.4), MUON_MINUS)
+    add_particle((4.0, 1.0, 0.5), (-1.5, -0.5, 0.0), ELECTRON)
+    add_particle((-4.0, -1.0, -0.5), (1.5, 0.5, 0.0), POSITRON)
 
 
 def spawn_random_particles(count):
-    type_ids = list(PARTICLE_TYPES.keys())
+    type_ids = list(PDG_PARTICLES.keys())
     for _ in range(count):
         tid = random.choice(type_ids)
         px = random.uniform(-6, 6)
@@ -112,9 +121,17 @@ def main():
                     renderer.boundary_mode,
                     renderer.boundary_size,
                     renderer.pair_threshold,
+                    bh_on=renderer.bh_enabled,
+                    bh_gm=renderer.bh_gm,
+                    bh_rs=renderer.bh_rs,
+                    bh_pos=renderer.bh_pos,
                 )
             do_maintenance(scaled_dt)
             renderer.fire_gun(real_dt)
+            if renderer.bh_enabled:
+                update_accretion_disk(
+                    scaled_dt, renderer.bh_gm, renderer.bh_rs,
+                    renderer.bh_x, renderer.bh_y, renderer.bh_z)
 
         if frame % 10 == 0:
             refresh_stats(renderer.selected_particle)

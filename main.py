@@ -8,19 +8,27 @@ Usage:
     python main.py --data event.h5     Load particles from HDF5 file
 
 Controls:
-    SPACE       Pause / Resume simulation
-    R           Reset simulation to demo state
-    C           Spawn two heavy particles on collision course
-    T           Toggle trajectory trails
-    F           Toggle collision/decay flash effects
-    E           Export current state to HDF5 file
-    RMB + drag  Orbit camera around scene
-    Scroll      Zoom in/out
+    SPACE       Pause / Resume
+    R           Reset to demo state
+    C           Spawn head-on collision (two heavy_x)
+    T           Toggle trails
+    F           Toggle collision flashes
+    E           Export state + time series to HDF5
+    G           Toggle particle gun
+    TAB         Cycle inspector to next particle
+    P           Pin/freeze selected particle
+    1           Preset: Rutherford scattering
+    2           Preset: Cyclotron (magnetic field spirals)
+    3           Preset: Random gas with gravity
+    4           Preset: Two-beam collision
+    RMB+drag    Orbit camera
+    Scroll      Zoom
     ESC         Quit
 """
 
 import argparse
 import random
+import time
 import taichi as ti
 
 ti.init(arch=ti.vulkan)
@@ -77,25 +85,39 @@ def main():
 
     renderer = Renderer()
     frame = 0
+    last_frame_time = time.time()
 
     while renderer.running:
+        now = time.time()
+        real_dt = now - last_frame_time
+        last_frame_time = now
+
         renderer.handle_input()
 
         if not renderer.paused:
-            sub_dt = renderer.dt / renderer.substeps
+            scaled_dt = renderer.dt * renderer.time_scale
+            sub_dt = scaled_dt / renderer.substeps
             for _ in range(renderer.substeps):
                 step(
                     sub_dt,
                     renderer.coulomb_k,
                     renderer.gravity_g,
-                    mag_field=renderer.mag_field,
-                    boundary_mode=renderer.boundary_mode,
-                    boundary_size=renderer.boundary_size,
+                    renderer.mag_field,
+                    renderer.e_field,
+                    renderer.strong_k,
+                    renderer.strong_range,
+                    renderer.use_relativity,
+                    renderer.c_light,
+                    renderer.synchro,
+                    renderer.boundary_mode,
+                    renderer.boundary_size,
+                    renderer.pair_threshold,
                 )
-            do_maintenance(renderer.dt)
+            do_maintenance(scaled_dt)
+            renderer.fire_gun(real_dt)
 
         if frame % 10 == 0:
-            refresh_stats()
+            refresh_stats(renderer.selected_particle)
         frame += 1
 
         renderer.render()

@@ -1,7 +1,6 @@
 import taichi as ti
-from config import PARTICLE_TYPES, DECAY_CHANNELS
+from config import PARTICLE_TYPES, DECAY_CHANNELS, NUM_TYPES, COLLISION_RULES
 
-NUM_TYPES = len(PARTICLE_TYPES)
 MAX_DECAY_PRODUCTS = 3
 MAX_CHANNELS = 4
 
@@ -10,11 +9,14 @@ type_charge = ti.field(dtype=ti.f32, shape=NUM_TYPES)
 type_radius = ti.field(dtype=ti.f32, shape=NUM_TYPES)
 type_decay_prob = ti.field(dtype=ti.f32, shape=NUM_TYPES)
 type_color = ti.Vector.field(3, dtype=ti.f32, shape=NUM_TYPES)
+type_is_baryon = ti.field(dtype=ti.i32, shape=NUM_TYPES)
 
 num_channels = ti.field(dtype=ti.i32, shape=NUM_TYPES)
 channel_num_products = ti.field(dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS))
 channel_products = ti.field(dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS, MAX_DECAY_PRODUCTS))
 channel_branch_cumulative = ti.field(dtype=ti.f32, shape=(NUM_TYPES, MAX_CHANNELS))
+
+collision_rule_table = ti.field(dtype=ti.i32, shape=(NUM_TYPES, NUM_TYPES))
 
 
 def load_particle_data():
@@ -24,6 +26,7 @@ def load_particle_data():
         type_radius[tid] = props["radius"]
         type_decay_prob[tid] = props["decay_prob"]
         type_color[tid] = ti.Vector(props["color"])
+        type_is_baryon[tid] = 1 if props.get("baryon", False) else 0
 
     for tid in range(NUM_TYPES):
         if tid in DECAY_CHANNELS:
@@ -41,6 +44,13 @@ def load_particle_data():
                 channel_branch_cumulative[tid, ci] = cumulative
         else:
             num_channels[tid] = 0
+
+    for t1 in range(NUM_TYPES):
+        for t2 in range(NUM_TYPES):
+            collision_rule_table[t1, t2] = 0
+    for (t1, t2), rule_id in COLLISION_RULES.items():
+        collision_rule_table[t1, t2] = rule_id
+        collision_rule_table[t2, t1] = rule_id
 
 
 def get_type_name(tid: int) -> str:

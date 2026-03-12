@@ -1,6 +1,9 @@
+"""Particle type data and Taichi field definitions for simulation."""
+
 import taichi as ti
-from config import NUM_TYPES
-from pdg_table import PARTICLES, COLLISION_RULES, MASS_SCALE, LIFETIME_SCALE
+
+from .config import NUM_TYPES
+from .pdg_table import COLLISION_RULES, LIFETIME_SCALE, MASS_SCALE, PARTICLES
 
 MAX_DECAY_PRODUCTS = 4
 MAX_CHANNELS = 8
@@ -18,14 +21,21 @@ type_strangeness = ti.field(dtype=ti.i32, shape=NUM_TYPES)
 type_antiparticle = ti.field(dtype=ti.i32, shape=NUM_TYPES)
 
 num_channels = ti.field(dtype=ti.i32, shape=NUM_TYPES)
-channel_num_products = ti.field(dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS))
-channel_products = ti.field(dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS, MAX_DECAY_PRODUCTS))
-channel_branch_cumulative = ti.field(dtype=ti.f32, shape=(NUM_TYPES, MAX_CHANNELS))
+channel_num_products = ti.field(
+    dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS)
+)
+channel_products = ti.field(
+    dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS, MAX_DECAY_PRODUCTS)
+)
+channel_branch_cumulative = ti.field(
+    dtype=ti.f32, shape=(NUM_TYPES, MAX_CHANNELS)
+)
 
 collision_rule_table = ti.field(dtype=ti.i32, shape=(NUM_TYPES, NUM_TYPES))
 
 
-def load_particle_data():
+def load_particle_data() -> None:
+    """Load PDG particle data into Taichi fields."""
     for tid, props in PARTICLES.items():
         type_mass[tid] = props["mass_mev"] * MASS_SCALE
         type_charge[tid] = float(props["charge_e"])
@@ -34,8 +44,8 @@ def load_particle_data():
         type_is_baryon[tid] = 1 if props["baryon_num"] != 0 else 0
         type_spin[tid] = props["spin"]
 
-        lt = props["lifetime_s"]
-        type_lifetime[tid] = lt / LIFETIME_SCALE if lt < 1e30 else 1e30
+        lifetime = props["lifetime_s"]
+        type_lifetime[tid] = lifetime / LIFETIME_SCALE if lifetime < 1e30 else 1e30
 
         type_baryon_num[tid] = props["baryon_num"]
         type_lepton_num[tid] = props["lepton_num"]
@@ -67,7 +77,11 @@ def load_particle_data():
 
     for tid, props in PARTICLES.items():
         anti = props["anti_id"]
-        if anti >= 0 and anti != tid and collision_rule_table[tid, anti] == 0:
+        if (
+            anti >= 0
+            and anti != tid
+            and collision_rule_table[tid, anti] == 0
+        ):
             if props["baryon_num"] != 0:
                 collision_rule_table[tid, anti] = 2
                 collision_rule_table[anti, tid] = 2
@@ -77,12 +91,14 @@ def load_particle_data():
 
 
 def get_type_name(tid: int) -> str:
-    p = PARTICLES.get(tid)
-    return p["name"] if p else f"type_{tid}"
+    """Return particle type name by ID."""
+    particle = PARTICLES.get(tid)
+    return particle["name"] if particle else f"type_{tid}"
 
 
 def get_type_id_by_name(name: str) -> int:
-    for tid, props in PARTICLES.items():
+    """Return particle type ID by name, or -1 if not found."""
+    for particle_tid, props in PARTICLES.items():
         if props["name"] == name:
-            return tid
+            return particle_tid
     return -1

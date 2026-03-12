@@ -1,7 +1,14 @@
-import taichi as ti
+"""Taichi UI window, camera, particle rendering, trails, and ImGui controls."""
+
+import math
 import random
 import time
-from config import (
+
+import taichi as ti
+
+from . import config
+from .config import (
+    BACKGROUND_COLOR,
     WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
     CAMERA_POS, CAMERA_LOOKAT, CAMERA_FOV,
     BASE_PARTICLE_RADIUS, PARTICLE_RADIUS_SCALE,
@@ -11,17 +18,29 @@ from config import (
     USE_RELATIVITY, SYNCHROTRON_COEFF, PAIR_CREATION_THRESHOLD,
     BOUNDARY_MODE, BOUNDARY_SIZE, BH_MASS,
 )
-from pdg_table import (
-    PARTICLES as PDG_PARTICLES, NUM_PARTICLES,
-    PROTON, ANTIPROTON, NEUTRON, ELECTRON, POSITRON,
-    MUON_MINUS, MUON_PLUS, PI_PLUS, PI_MINUS, PI_ZERO,
-    K_PLUS, K_MINUS, PHOTON, LAMBDA_ZERO, DELTA_PP,
-    W_PLUS, W_MINUS, Z_ZERO, HIGGS, TAU_MINUS, TAU_PLUS,
+from .pdg_table import (
+    DELTA_PP,
+    ELECTRON,
+    K_MINUS,
+    K_PLUS,
+    MUON_MINUS,
+    MUON_PLUS,
+    NEUTRON,
+    PARTICLES as PDG_PARTICLES,
+    PHOTON,
+    PI_MINUS,
+    PI_PLUS,
+    PI_ZERO,
+    POSITRON,
+    PROTON,
+    ANTIPROTON,
 )
-import simulation as sim
+from . import simulation as sim
 
 
 class Renderer:
+    """Main rendering and UI controller for the particle simulation."""
+
     def __init__(self):
         self.window = ti.ui.Window(
             WINDOW_TITLE, (WINDOW_WIDTH, WINDOW_HEIGHT), vsync=True,
@@ -50,7 +69,12 @@ class Renderer:
         self.c_light = SPEED_OF_LIGHT
         self.synchro = SYNCHROTRON_COEFF
         self.pair_threshold = PAIR_CREATION_THRESHOLD
-        self.boundary_mode_idx = 0 if BOUNDARY_MODE == "reflect" else (1 if BOUNDARY_MODE == "periodic" else 2)
+        if BOUNDARY_MODE == "reflect":
+            self.boundary_mode_idx = 0
+        elif BOUNDARY_MODE == "periodic":
+            self.boundary_mode_idx = 1
+        else:
+            self.boundary_mode_idx = 2
         self.boundary_size = BOUNDARY_SIZE
         self.particle_size = BASE_PARTICLE_RADIUS
         self.trail_width = 1.5
@@ -92,7 +116,8 @@ class Renderer:
         self.fps = 0.0
         self.frame_count = 0
 
-    def handle_input(self):
+    def handle_input(self) -> None:
+        """Process keyboard input events."""
         while self.window.get_event(ti.ui.PRESS):
             key = self.window.event.key
             if key == ti.ui.ESCAPE:
@@ -137,7 +162,8 @@ class Renderer:
             elif key == '7':
                 self._preset_ee_annihilation()
 
-    def fire_gun(self, real_dt):
+    def fire_gun(self, real_dt: float) -> None:
+        """Spawn particles from the gun at configured rate."""
         if not self.gun_enabled:
             return
         self._gun_accum += real_dt * self.gun_rate
@@ -148,7 +174,9 @@ class Renderer:
             dz = self.gun_dz + (random.random() - 0.5) * self.gun_spread
             mag = (dx*dx + dy*dy + dz*dz) ** 0.5
             if mag > 0:
-                dx /= mag; dy /= mag; dz /= mag
+                dx /= mag
+                dy /= mag
+                dz /= mag
             sim.add_particle(
                 (self.gun_px, self.gun_py, self.gun_pz),
                 (dx * self.gun_speed, dy * self.gun_speed, dz * self.gun_speed),
@@ -187,11 +215,12 @@ class Renderer:
             sim.add_particle((-8.0, y, 0.0), (5.0, 0.0, 0.0), PROTON)
 
     def _preset_cyclotron(self):
-        import math
         sim.init_simulation()
         self.coulomb_k = 0.0
         self.gravity_g = 0.0
-        self.mag_x = 0.0; self.mag_y = 0.0; self.mag_z = 8.0
+        self.mag_x = 0.0
+        self.mag_y = 0.0
+        self.mag_z = 8.0
         self.strong_k = 0.0
         types = [ELECTRON, POSITRON, MUON_MINUS, MUON_PLUS, PI_PLUS, PI_MINUS]
         for i in range(6):
@@ -218,7 +247,6 @@ class Renderer:
             sim.add_particle((px, py, pz), (vx, vy, vz), tid)
 
     def _preset_black_hole(self):
-        import math
         sim.init_simulation()
         self.bh_enabled = True
         self.bh_mass = 300.0
@@ -266,7 +294,6 @@ class Renderer:
 
     def _preset_lhc_pp(self):
         """LHC-style proton-proton head-on collision."""
-        import math
         sim.init_simulation()
         self.coulomb_k = 5.0
         self.gravity_g = 0.0
@@ -294,7 +321,8 @@ class Renderer:
             sim.add_particle((-6.0, y, 0.0), (speed, 0.0, 0.0), ELECTRON)
             sim.add_particle((6.0, -y, 0.0), (-speed, 0.0, 0.0), POSITRON)
 
-    def draw_gui(self):
+    def draw_gui(self) -> None:
+        """Draw ImGui control panels."""
         st = sim.cached_stats
         bmode = self.boundary_modes[self.boundary_mode_idx]
 
@@ -319,6 +347,10 @@ class Renderer:
             self.use_relativity = rel_int == 1
             self.synchro = w.slider_float("Synchro", self.synchro, 0.0, 1.0)
             self.pair_threshold = w.slider_float("Pair Thr", self.pair_threshold, 1.0, 50.0)
+            integrator_idx = 1 if config.INTEGRATOR == "leapfrog" else 0
+            integrator_idx = w.slider_int("Integrator", integrator_idx, 0, 1)
+            config.INTEGRATOR = "leapfrog" if integrator_idx == 1 else "euler"
+            w.text("  0=Euler 1=Leapfrog")
 
         with self.gui.sub_window("Boundary", 0.003, 0.59, 0.20, 0.12) as w:
             self.boundary_mode_idx = w.slider_int("Mode", self.boundary_mode_idx, 0, 2)
@@ -347,7 +379,11 @@ class Renderer:
                 self._disk_initialized = False
 
         with self.gui.sub_window("Spawn", 0.003, 0.90, 0.20, 0.095) as w:
-            spawn_idx = self._spawn_ids.index(self.spawn_type) if self.spawn_type in self._spawn_ids else 0
+            spawn_idx = (
+                self._spawn_ids.index(self.spawn_type)
+                if self.spawn_type in self._spawn_ids
+                else 0
+            )
             spawn_idx = w.slider_int("Type", spawn_idx, 0, len(self._spawn_ids) - 1)
             self.spawn_type = self._spawn_ids[spawn_idx]
             w.text(f"  [{self.type_names[self.spawn_type]}]")
@@ -395,11 +431,16 @@ class Renderer:
         with self.gui.sub_window("Inspector", 0.795, 0.62, 0.202, 0.20) as w:
             w.text(f"Sel #{self.selected_particle} (TAB cycle, P pin)")
             sel_t = int(st.get('sel_type', 0))
-            tn = self.type_names[sel_t] if 0 <= sel_t < NUM_TYPES and st.get('particles', 0) > 0 else "---"
+            has_particles = st.get("particles", 0) > 0
+            in_range = 0 <= sel_t < NUM_TYPES
+            tn = self.type_names[sel_t] if in_range and has_particles else "---"
             frz = "FROZEN" if st.get('sel_frozen', 0) else ""
             w.text(f"Type: {tn}  {frz}")
             w.text(f"m={st.get('sel_mass',0):.4f}  q={st.get('sel_charge',0):.0f}")
-            w.text(f"pos: ({st.get('sel_px',0):.1f},{st.get('sel_py',0):.1f},{st.get('sel_pz',0):.1f})")
+            px_val = st.get("sel_px", 0)
+            py_val = st.get("sel_py", 0)
+            pz_val = st.get("sel_pz", 0)
+            w.text(f"pos: ({px_val:.1f},{py_val:.1f},{pz_val:.1f})")
             w.text(f"spd: {st.get('sel_speed',0):.2f}  KE: {st.get('sel_ke',0):.3f}")
             pdg_info = PDG_PARTICLES.get(sel_t)
             if pdg_info and st.get('particles', 0) > 0:
@@ -416,7 +457,11 @@ class Renderer:
         with self.gui.sub_window("Gun/Presets", 0.795, 0.83, 0.202, 0.165) as w:
             gun_int = w.slider_int("Gun", 1 if self.gun_enabled else 0, 0, 1)
             self.gun_enabled = gun_int == 1
-            gun_idx = self._spawn_ids.index(self.gun_type) if self.gun_type in self._spawn_ids else 0
+            gun_idx = (
+                self._spawn_ids.index(self.gun_type)
+                if self.gun_type in self._spawn_ids
+                else 0
+            )
             gun_idx = w.slider_int("G.Type", gun_idx, 0, len(self._spawn_ids) - 1)
             self.gun_type = self._spawn_ids[gun_idx]
             self.gun_speed = w.slider_float("G.Spd", self.gun_speed, 1.0, 20.0)
@@ -424,7 +469,8 @@ class Renderer:
             w.text("1=Ruth 2=Cycl 3=Gas 4=Beam")
             w.text("5=BH 6=LHC 7=e+e-")
 
-    def render(self):
+    def render(self) -> None:
+        """Render one frame: particles, trails, black hole, GUI."""
         self.frame_count += 1
         now = time.time()
         dt = now - self.last_time
@@ -436,6 +482,7 @@ class Renderer:
             self.window, movement_speed=0.08,
             yaw_speed=2.0, pitch_speed=2.0, hold_key=ti.ui.RMB,
         )
+        self.canvas.set_background_color(BACKGROUND_COLOR)
         self.scene.set_camera(self.camera)
         self.scene.ambient_light((0.15, 0.15, 0.2))
         self.scene.point_light(pos=(8, 8, 15), color=(1.0, 0.95, 0.9))
@@ -495,7 +542,8 @@ class Renderer:
             if tc > 0:
                 nv = min(tc * 2, MAX_PARTICLES * TRAIL_LENGTH * 2)
                 self.scene.lines(
-                    sim.trail_vertices, width=self.trail_width,
+                    sim.trail_vertices,
+                width=self.trail_width,
                     per_vertex_color=sim.trail_colors, vertex_count=nv,
                 )
 

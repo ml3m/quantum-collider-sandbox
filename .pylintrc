@@ -1,0 +1,44 @@
+[MASTER]
+jobs=1
+ignore=CVS,.git,__pycache__,.venv
+
+[FORMAT]
+max-line-length=100
+
+[DESIGN]
+max-args=20
+max-attributes=20
+max-bool-expr=6
+max-branches=40
+max-returns=8
+max-statements=150
+
+[NAMES]
+good-names=E_star,E1_star,E2_star,E_lab,V_hat,M,Q,i,j,k,n,p,d,f,m,t,r,x,y,z,bx,by,bz,ex,ey,ez,bhx,bhy,bhz,base_r,r_scale,pi
+
+[MESSAGES CONTROL]
+disable=
+    import-error,
+    duplicate-code,
+    too-many-lines,
+    too-many-arguments,
+    too-many-positional-arguments,
+    too-many-branches,
+    too-many-statements,
+    too-many-nested-blocks,
+    too-many-locals,
+    consider-using-dict-items,
+    chained-comparison,
+    too-many-instance-attributes,
+    wrong-import-position,
+    import-outside-toplevel,
+    consider-using-enumerate,
+    consider-using-max-builtin,
+    unused-argument,
+    missing-function-docstring,
+    missing-module-docstring,
+    missing-class-docstring,
+    invalid-name
+
+[BASIC]
+good-names=_

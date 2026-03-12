@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum-collider-sandbox"
+version = "1.0.0"
+description = "Real-Time GPU Particle Physics Simulation with PDG-accurate particle catalog"
+readme = "README"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Quantum Collider Sandbox"}]
+keywords = ["physics", "simulation", "particles", "taichi", "gpu"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy>=1.24,<3",
+    "scipy>=1.10",
+    "taichi>=1.7.0",
+    "h5py>=3.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pylint>=3.0",
+    "ruff>=0.1",
+    "black>=23",
+    "pytest>=7",
+    "pytest-cov>=4",
+]
+
+[project.scripts]
+quantum-collider = "quantum_collider_sandbox.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pylint.messages_control]
+disable = ["duplicate-code", "too-many-locals"]
+max-line-length = 100
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint.design]
+max-args = 12
+max-attributes = 15
+max-bool-expr = 5
+max-branches = 15
+max-returns = 6
+max-statements = 60
+
+[tool.pylint.similarities]
+min-similarity-lines = 10
+ignore-comments = true
+ignore-docstrings = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

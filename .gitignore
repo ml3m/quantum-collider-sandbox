@@ -1,2 +1,11 @@
 venv
+.venv
 __pycache__
+*.pyc
+*.egg-info
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+*.h5

@@ -1,3 +1,5 @@
+"""Simulation and window configuration constants."""
+
 MAX_PARTICLES = 2000
 TRAIL_LENGTH = 80
 
@@ -43,3 +45,6 @@ PARTICLE_RADIUS_SCALE = 0.35
 NUM_TYPES = 48
 
 BH_MASS = 200.0
+
+# "euler" = simple Euler (faster, less accurate); "leapfrog" = symplectic (better energy)
+INTEGRATOR = "leapfrog"

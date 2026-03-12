@@ -1,7 +1,10 @@
-import numpy as np
+"""HDF5 and CSV loader for CMS/ATLAS-style event data."""
+
 import h5py
-import simulation as sim
-from particles import get_type_id_by_name
+import numpy as np
+
+from . import simulation as sim
+from .particles import get_type_id_by_name
 
 PDG_TO_TYPE = {
     2212: "proton",

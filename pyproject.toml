@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "quantum-collider-sandbox"
 version = "1.0.0"
 description = "Real-Time GPU Particle Physics Simulation with PDG-accurate particle catalog"
-readme = "README"
+readme = "README.rst"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "Quantum Collider Sandbox"}]

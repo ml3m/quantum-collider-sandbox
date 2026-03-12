@@ -11,3 +11,4 @@ build
 htmlcov
 *.h5
 data/
+.vscode

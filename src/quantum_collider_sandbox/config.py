@@ -7,29 +7,30 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 EXPORT_DIR = _PROJECT_ROOT / "data" / "exports"
 
-MAX_PARTICLES = 2000
-TRAIL_LENGTH = 100
+MAX_PARTICLES = 100
+TRAIL_LENGTH = 1000
 
 DT = 0.002
 SUBSTEPS = 3
 COULOMB_K = 40.0
-GRAVITY_G = 0.0
+GRAVITY_G = 6.0
 SOFTENING = 0.05
 CUTOFF_RADIUS = 15.0
 
-MAGNETIC_FIELD = (0.0, 0.0, 0.0)
-E_FIELD = (0.0, 0.0, 0.0)
+MAGNETIC_FIELD = (0.0, 0.0, 2.0)
+E_FIELD = (0.0, 1.0, 0.0)
 
 STRONG_FORCE_K = 0.0
 STRONG_FORCE_RANGE = 0.5
 
 SPEED_OF_LIGHT = 30.0
-USE_RELATIVITY = False
+USE_RELATIVITY = True
 
 SYNCHROTRON_COEFF = 0.0
 
 COLLISION_RESTITUTION = 0.85
 MAX_VELOCITY = 29.9
+MIN_VELOCITY = 0.01  # Floor to prevent numerical zero-velocity trap (boundary, underflow)
 SPAWN_VELOCITY_SPREAD = 2.5
 PAIR_CREATION_THRESHOLD = 15.0
 
@@ -37,8 +38,10 @@ BOUNDARY_MODE = "reflect"
 BOUNDARY_SIZE = 12.0
 
 # ── Visualization ────────────────────────────────────────────────────────
-WINDOW_WIDTH = 1600
-WINDOW_HEIGHT = 900
+# resolution is required to be set in order to have menus show up properly
+# otherwise the menus will be displayed all over the place
+WINDOW_WIDTH = 2560
+WINDOW_HEIGHT = 1600
 WINDOW_TITLE = "Quantum Collider Sandbox"
 
 CAMERA_POS = (0.0, 2.0, 22.0)

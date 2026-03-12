@@ -10,6 +10,7 @@ from .config import (
     CUTOFF_RADIUS,
     MAX_PARTICLES,
     MAX_VELOCITY,
+    MIN_VELOCITY,
     NUM_TYPES,
     SOFTENING,
     SPAWN_VELOCITY_SPREAD,
@@ -122,7 +123,7 @@ time_series = {"step": [], "ke": [], "particles": [], "collisions": [], "decays"
 
 def _reset_cached() -> None:
     """Reset cached statistics to zero."""
-    keys = ["ke", "mom", "collisions", "decays", "step", "particles",
+    keys = ["ke", "mom", "mom_x", "mom_y", "mom_z", "collisions", "decays", "step", "particles",
             "annihilations", "pair_creations", "detector_hits", "detector_energy",
             "avg_speed", "total_pe", "flash_rc", "bh_captures",
             "sel_px", "sel_py", "sel_pz", "sel_vx", "sel_vy", "sel_vz",
@@ -317,6 +318,10 @@ def apply_boundaries_reflect(bound: ti.f32):
                 ke = 0.5 * mass[i] * vel[i].norm_sqr()
                 ti.atomic_add(detector_hits_acc[None], 1)
                 ti.atomic_add(detector_energy_acc[None], ke)
+        # Prevent zero-velocity trap: boundary restitution can decay v to 0
+        speed = vel[i].norm()
+        if speed > 0.0 and speed < MIN_VELOCITY:
+            vel[i] = vel[i] * (MIN_VELOCITY / speed)
 
 
 @ti.kernel
@@ -412,6 +417,36 @@ def cm_decay_3body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32,
     return v1, v2, v3
 
 
+@ti.func
+def cm_decay_4body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, m4: ti.f32,
+                   parent_vel: ti.template(), c_light: ti.f32):
+    """4-body decay via recursive 2-body: M -> (m1+m2) + (m3+m4), each 2-body."""
+    m12_min = m1 + m2 + 1e-6
+    m12_max = M - m3 - m4 - 1e-6
+    m12 = m12_min + ti.random(ti.f32) * ti.max(m12_max - m12_min, 1e-6)
+    m34 = M - m12
+
+    v12, v34 = cm_decay_2body(M, m12, m34, parent_vel, c_light)
+    v1, v2 = cm_decay_2body(m12, m1, m2, v12, c_light)
+    v3, v4 = cm_decay_2body(m34, m3, m4, v34, c_light)
+    return v1, v2, v3, v4
+
+
+@ti.func
+def cm_decay_5body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, m4: ti.f32, m5: ti.f32,
+                   parent_vel: ti.template(), c_light: ti.f32):
+    """5-body decay via recursive 2-body + 3-body: M -> (m1+m2) + (m3+m4+m5)."""
+    m12_min = m1 + m2 + 1e-6
+    m12_max = M - m3 - m4 - m5 - 1e-6
+    m12 = m12_min + ti.random(ti.f32) * ti.max(m12_max - m12_min, 1e-6)
+    m345 = M - m12
+
+    v12, v345 = cm_decay_2body(M, m12, m345, parent_vel, c_light)
+    v1, v2 = cm_decay_2body(m12, m1, m2, v12, c_light)
+    v3, v4, v5 = cm_decay_3body(m345, m3, m4, m5, v345, c_light)
+    return v1, v2, v3, v4, v5
+
+
 # ── Collision detection ───────────────────────────────────────────────────
 
 @ti.kernel
@@ -421,42 +456,44 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
         if alive[i] == 0:
             continue
         for j in range(i + 1, n):
+            if alive[i] == 0:
+                break
             if alive[j] == 0:
                 continue
             diff = pos[j] - pos[i]
             dist = diff.norm()
             min_dist = (radius[i] + radius[j]) * 1.5
-            if dist < min_dist and dist > 1e-8:
+            if dist < min_dist:
                 t1 = ptype[i]
                 t2 = ptype[j]
                 if t1 == PHOTON or t2 == PHOTON:
                     continue
-                normal = diff / dist
-                overlap = min_dist - dist
+                # Use safe normal when dist nearly zero (avoids div-by-tiny, stuck overlap)
+                overlap = min_dist - dist if dist > 1e-8 else min_dist
+                normal = (diff / dist) if dist > 1e-8 else _random_dir()
                 rule = collision_rule_table[t1, t2]
 
                 if rule == 1:
-                    # Lepton-antilepton annihilation -> 2 photons
+                    # Lepton-antilepton annihilation -> 2 photons (momentum-conserving)
                     alive[i] = 0
                     alive[j] = 0
                     ti.atomic_add(annihilation_count_acc[None], 1)
                     center = (pos[i] + pos[j]) * 0.5
                     mom = mass[i] * vel[i] + mass[j] * vel[j]
-                    mom_dir = mom.normalized() if mom.norm() > 1e-8 else ti.Vector([1.0, 0.0, 0.0])
-                    perp = ti.Vector([0.0, 1.0, 0.0])
-                    if ti.abs(mom_dir.dot(perp)) > 0.9:
-                        perp = ti.Vector([1.0, 0.0, 0.0])
-                    perp = (perp - mom_dir * perp.dot(mom_dir)).normalized()
-                    photon_speed = c_light * 0.999
+                    parent_vel_c = mom / (mass[i] + mass[j])
+                    inv_m = mass[i] + mass[j]
+                    v1_ph, v2_ph = cm_decay_2body(inv_m, 0.0, 0.0, parent_vel_c, c_light)
+                    d1 = v1_ph.normalized() if v1_ph.norm() > 1e-8 else _random_dir()
+                    offset = 0.15
                     s1 = ti.atomic_add(spawn_count[None], 1)
                     if s1 < MAX_PARTICLES:
-                        spawn_queue_pos[s1] = center
-                        spawn_queue_vel[s1] = (mom_dir + perp * 0.3).normalized() * photon_speed
+                        spawn_queue_pos[s1] = center + d1 * offset
+                        spawn_queue_vel[s1] = v1_ph
                         spawn_queue_type[s1] = 12  # PHOTON
                     s2 = ti.atomic_add(spawn_count[None], 1)
                     if s2 < MAX_PARTICLES:
-                        spawn_queue_pos[s2] = center
-                        spawn_queue_vel[s2] = (mom_dir - perp * 0.3).normalized() * photon_speed
+                        spawn_queue_pos[s2] = center - d1 * offset
+                        spawn_queue_vel[s2] = v2_ph
                         spawn_queue_type[s2] = 12  # PHOTON
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
@@ -465,7 +502,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                         flash_life[fidx] = 1.0
 
                 elif rule == 2:
-                    # Baryon-antibaryon annihilation -> pions
+                    # Baryon-antibaryon annihilation -> 5 pions (momentum-conserving)
                     alive[i] = 0
                     alive[j] = 0
                     ti.atomic_add(annihilation_count_acc[None], 1)
@@ -474,20 +511,73 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     inv_m = mass[i] + mass[j]
                     idx_im = ti.atomic_add(inv_mass_head[None], 1) % INV_MASS_BUF
                     inv_mass_buffer[idx_im] = inv_m
-                    for _ in range(5):
-                        rd = _random_dir()
-                        pion_type = 20  # pi0
-                        rp = ti.random(ti.f32)
-                        if rp < 0.33:
-                            pion_type = 18  # pi+
-                        elif rp < 0.66:
-                            pion_type = 19  # pi-
-                        s = ti.atomic_add(spawn_count[None], 1)
-                        if s < MAX_PARTICLES:
-                            spawn_queue_pos[s] = center + rd * 0.2
-                            v_spawn = parent_vel_c * 0.3 + rd * SPAWN_VELOCITY_SPREAD * 2.0
-                            spawn_queue_vel[s] = v_spawn
-                            spawn_queue_type[s] = pion_type
+                    pt1 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt1 = 18
+                    elif rp < 0.66:
+                        pt1 = 19
+                    pt2 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt2 = 18
+                    elif rp < 0.66:
+                        pt2 = 19
+                    pt3 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt3 = 18
+                    elif rp < 0.66:
+                        pt3 = 19
+                    pt4 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt4 = 18
+                    elif rp < 0.66:
+                        pt4 = 19
+                    pt5 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt5 = 18
+                    elif rp < 0.66:
+                        pt5 = 19
+                    m1 = type_mass[pt1]
+                    m2 = type_mass[pt2]
+                    m3 = type_mass[pt3]
+                    m4 = type_mass[pt4]
+                    m5 = type_mass[pt5]
+                    v1, v2, v3, v4, v5 = cm_decay_5body(inv_m, m1, m2, m3, m4, m5,
+                                                        parent_vel_c, c_light)
+                    rd1 = _random_dir()
+                    rd2 = _random_dir()
+                    rd3 = _random_dir()
+                    rd4 = _random_dir()
+                    rd5 = _random_dir()
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd1 * 0.2
+                        spawn_queue_vel[s] = v1
+                        spawn_queue_type[s] = pt1
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd2 * 0.2
+                        spawn_queue_vel[s] = v2
+                        spawn_queue_type[s] = pt2
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd3 * 0.2
+                        spawn_queue_vel[s] = v3
+                        spawn_queue_type[s] = pt3
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd4 * 0.2
+                        spawn_queue_vel[s] = v4
+                        spawn_queue_type[s] = pt4
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd5 * 0.2
+                        spawn_queue_vel[s] = v5
+                        spawn_queue_type[s] = pt5
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
                         flash_render_pos[fidx] = center
@@ -495,7 +585,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                         flash_life[fidx] = 1.2
 
                 elif rule == 3:
-                    # Collision-induced decay -> light mesons
+                    # Collision-induced decay -> 4 light mesons (momentum-conserving)
                     alive[i] = 0
                     alive[j] = 0
                     ti.atomic_add(collision_count_acc[None], 1)
@@ -504,20 +594,57 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     inv_m = mass[i] + mass[j]
                     idx_im = ti.atomic_add(inv_mass_head[None], 1) % INV_MASS_BUF
                     inv_mass_buffer[idx_im] = inv_m
-                    for _ in range(4):
-                        rd = _random_dir()
-                        pion_type = 20
-                        rp = ti.random(ti.f32)
-                        if rp < 0.33:
-                            pion_type = 18
-                        elif rp < 0.66:
-                            pion_type = 19
-                        s = ti.atomic_add(spawn_count[None], 1)
-                        if s < MAX_PARTICLES:
-                            spawn_queue_pos[s] = center + rd * 0.2
-                            v_spawn = parent_vel_c * 0.3 + rd * SPAWN_VELOCITY_SPREAD * 2.0
-                            spawn_queue_vel[s] = v_spawn
-                            spawn_queue_type[s] = pion_type
+                    pt1 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt1 = 18
+                    elif rp < 0.66:
+                        pt1 = 19
+                    pt2 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt2 = 18
+                    elif rp < 0.66:
+                        pt2 = 19
+                    pt3 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt3 = 18
+                    elif rp < 0.66:
+                        pt3 = 19
+                    pt4 = 20
+                    rp = ti.random(ti.f32)
+                    if rp < 0.33:
+                        pt4 = 18
+                    elif rp < 0.66:
+                        pt4 = 19
+                    m1, m2, m3, m4 = type_mass[pt1], type_mass[pt2], type_mass[pt3], type_mass[pt4]
+                    v1, v2, v3, v4 = cm_decay_4body(inv_m, m1, m2, m3, m4,
+                                                   parent_vel_c, c_light)
+                    rd1 = _random_dir()
+                    rd2 = _random_dir()
+                    rd3 = _random_dir()
+                    rd4 = _random_dir()
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd1 * 0.2
+                        spawn_queue_vel[s] = v1
+                        spawn_queue_type[s] = pt1
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd2 * 0.2
+                        spawn_queue_vel[s] = v2
+                        spawn_queue_type[s] = pt2
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd3 * 0.2
+                        spawn_queue_vel[s] = v3
+                        spawn_queue_type[s] = pt3
+                    s = ti.atomic_add(spawn_count[None], 1)
+                    if s < MAX_PARTICLES:
+                        spawn_queue_pos[s] = center + rd4 * 0.2
+                        spawn_queue_vel[s] = v4
+                        spawn_queue_type[s] = pt4
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
                         flash_render_pos[fidx] = center
@@ -550,17 +677,21 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                         if combined_ke > pair_threshold and ti.random(ti.f32) < 0.08:
                             c = (pos[i] + pos[j]) * 0.5
                             rd = _random_dir()
-                            creation_cost = type_mass[0] + type_mass[1]  # e- + e+
+                            creation_cost = type_mass[0] + type_mass[1]  # e- + e+ rest mass
                             if combined_ke > creation_cost * 2.0:
+                                ke_remain = combined_ke - creation_cost
+                                m_e = type_mass[0]
+                                speed = ti.sqrt(ti.max(ke_remain / (m_e + 1e-30), 0.0))
+                                speed = ti.min(speed, c_light * 0.999)
                                 s1 = ti.atomic_add(spawn_count[None], 1)
                                 if s1 < MAX_PARTICLES:
                                     spawn_queue_pos[s1] = c + rd * 0.15
-                                    spawn_queue_vel[s1] = rd * SPAWN_VELOCITY_SPREAD
+                                    spawn_queue_vel[s1] = rd * speed
                                     spawn_queue_type[s1] = 0   # electron
                                 s2 = ti.atomic_add(spawn_count[None], 1)
                                 if s2 < MAX_PARTICLES:
                                     spawn_queue_pos[s2] = c - rd * 0.15
-                                    spawn_queue_vel[s2] = -rd * SPAWN_VELOCITY_SPREAD
+                                    spawn_queue_vel[s2] = -rd * speed
                                     spawn_queue_type[s2] = 1   # positron
                                 ti.atomic_add(pair_creation_count_acc[None], 1)
                                 ratio = creation_cost / (combined_ke + 1e-8)
@@ -662,14 +793,16 @@ def monte_carlo_decay(dt: ti.f32, use_rel: ti.i32, c_light: ti.f32,
                 pt1 = channel_products[pt, selected_channel, 1]
                 m1 = type_mass[pt1]
                 va, vb = cm_decay_2body(parent_m, m0, m1, parent_vel_v, c_light)
+                offset_a = va.normalized() * 0.05 if va.norm() > 1e-8 else _random_dir() * 0.05
+                offset_b = vb.normalized() * 0.05 if vb.norm() > 1e-8 else _random_dir() * 0.05
                 idx = ti.atomic_add(spawn_count[None], 1)
                 if idx < MAX_PARTICLES:
-                    spawn_queue_pos[idx] = parent_pos
+                    spawn_queue_pos[idx] = parent_pos + offset_a
                     spawn_queue_vel[idx] = va
                     spawn_queue_type[idx] = pt0
                 idx = ti.atomic_add(spawn_count[None], 1)
                 if idx < MAX_PARTICLES:
-                    spawn_queue_pos[idx] = parent_pos
+                    spawn_queue_pos[idx] = parent_pos + offset_b
                     spawn_queue_vel[idx] = vb
                     spawn_queue_type[idx] = pt1
 
@@ -679,19 +812,22 @@ def monte_carlo_decay(dt: ti.f32, use_rel: ti.i32, c_light: ti.f32,
                 m1 = type_mass[pt1]
                 m2 = type_mass[pt2]
                 va, vb, vc = cm_decay_3body(parent_m, m0, m1, m2, parent_vel_v, c_light)
+                offset_a = va.normalized() * 0.05 if va.norm() > 1e-8 else _random_dir() * 0.05
+                offset_b = vb.normalized() * 0.05 if vb.norm() > 1e-8 else _random_dir() * 0.05
+                offset_c = vc.normalized() * 0.05 if vc.norm() > 1e-8 else _random_dir() * 0.05
                 idx = ti.atomic_add(spawn_count[None], 1)
                 if idx < MAX_PARTICLES:
-                    spawn_queue_pos[idx] = parent_pos
+                    spawn_queue_pos[idx] = parent_pos + offset_a
                     spawn_queue_vel[idx] = va
                     spawn_queue_type[idx] = pt0
                 idx = ti.atomic_add(spawn_count[None], 1)
                 if idx < MAX_PARTICLES:
-                    spawn_queue_pos[idx] = parent_pos
+                    spawn_queue_pos[idx] = parent_pos + offset_b
                     spawn_queue_vel[idx] = vb
                     spawn_queue_type[idx] = pt1
                 idx = ti.atomic_add(spawn_count[None], 1)
                 if idx < MAX_PARTICLES:
-                    spawn_queue_pos[idx] = parent_pos
+                    spawn_queue_pos[idx] = parent_pos + offset_c
                     spawn_queue_vel[idx] = vc
                     spawn_queue_type[idx] = pt2
 
@@ -714,17 +850,25 @@ def monte_carlo_decay(dt: ti.f32, use_rel: ti.i32, c_light: ti.f32,
                 vc, vd = cm_decay_2body(m_v2, m2, m3, v_v2, c_light)
 
                 products_4 = ti.Vector([pt0, pt1, pt2, pt3])
+                offset_va = va.normalized() * 0.05 if va.norm() > 1e-8 else _random_dir() * 0.05
+                offset_vb = vb.normalized() * 0.05 if vb.norm() > 1e-8 else _random_dir() * 0.05
+                offset_vc = vc.normalized() * 0.05 if vc.norm() > 1e-8 else _random_dir() * 0.05
+                offset_vd = vd.normalized() * 0.05 if vd.norm() > 1e-8 else _random_dir() * 0.05
                 for pi in ti.static(range(4)):
                     v_out = va
+                    pos_offset = offset_va
                     if pi == 1:
                         v_out = vb
+                        pos_offset = offset_vb
                     elif pi == 2:
                         v_out = vc
+                        pos_offset = offset_vc
                     elif pi == 3:
                         v_out = vd
+                        pos_offset = offset_vd
                     idx = ti.atomic_add(spawn_count[None], 1)
                     if idx < MAX_PARTICLES:
-                        spawn_queue_pos[idx] = parent_pos
+                        spawn_queue_pos[idx] = parent_pos + pos_offset
                         spawn_queue_vel[idx] = v_out
                         spawn_queue_type[idx] = products_4[pi]
 
@@ -733,6 +877,8 @@ def monte_carlo_decay(dt: ti.f32, use_rel: ti.i32, c_light: ti.f32,
 
 @ti.kernel
 def _apply_spawn_queue():
+    """Apply spawn queue: collision/decay products. All spawns get frozen=0 (never frozen).
+    Must run before Leapfrog second half so new particles receive forces + half-kick."""
     sc = spawn_count[None]
     n = num_active[None]
     for i in range(sc):
@@ -747,7 +893,7 @@ def _apply_spawn_queue():
             charge[idx] = type_charge[pt]
             radius[idx] = type_radius[pt]
             alive[idx] = 1
-            frozen[idx] = 0
+            frozen[idx] = 0  # Spawn products are never frozen; only add_particle(is_frozen=True) sets frozen
             trail_head[idx] = 0
             trail_count[idx] = 0
 
@@ -893,12 +1039,15 @@ def _compute_stats(sel_idx: ti.i32):
 @ti.kernel
 def build_render_data(base_r: ti.f32, r_scale: ti.f32,
                       bh_on: ti.i32, bh_rs: ti.f32,
-                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32):
+                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32,
+                      hide_photons: ti.i32):
     n = num_active[None]
     bh_p = ti.Vector([bhx, bhy, bhz])
     render_count[None] = 0
     for i in range(n):
         if alive[i] == 1:
+            if hide_photons == 1 and ptype[i] == PHOTON:
+                continue
             idx = ti.atomic_add(render_count[None], 1)
             render_pos[idx] = _deflect_pos(pos[i], bh_p, bh_rs, bh_on)
             pt = ptype[i]
@@ -933,12 +1082,15 @@ def _deflect_pos(p: ti.template(), bh_p: ti.template(),
 
 @ti.kernel
 def build_trail_lines(bh_on: ti.i32, bh_rs: ti.f32,
-                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32):
+                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32,
+                      hide_photons: ti.i32):
     trail_line_count[None] = 0
     n = num_active[None]
     bh_p = ti.Vector([bhx, bhy, bhz])
     for i in range(n):
         if alive[i] == 0:
+            continue
+        if hide_photons == 1 and ptype[i] == PHOTON:
             continue
         tc = trail_count[i]
         if tc < 2:
@@ -1103,11 +1255,14 @@ def step(dt, coulomb_k, gravity_g, mag_field, e_field,
          strong_k, strong_range, use_rel, c_light, synchro,
          boundary_mode, boundary_size, pair_threshold,
          bh_on=False, bh_gm=0.0, bh_rs=0.0, bh_pos=(0., 0., 0.)):
+    """Leapfrog: half-kick -> drift -> collisions/decay/spawn -> half-kick.
+    Spawned particles get forces + half-kick in same step (num_active updated before 2nd forces)."""
     bh_i = 1 if bh_on else 0
     use_rel_i = 1 if use_rel else 0
     bh_xyz = (bh_pos[0], bh_pos[1], bh_pos[2])
     use_leapfrog = _config.INTEGRATOR == "leapfrog"
 
+    # 1. Forces, 2. Half-kick + drift (Leapfrog) or full Euler step
     _call_forces(coulomb_k, gravity_g, mag_field, e_field,
                  strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos)
 
@@ -1118,6 +1273,7 @@ def step(dt, coulomb_k, gravity_g, mag_field, e_field,
         _integrate_step(dt, dt, use_rel_i, c_light, synchro,
                        bh_i, bh_rs, *bh_xyz)
 
+    # 3. Boundaries, 4. Collisions (may spawn), 5. Decay (may spawn)
     if boundary_mode == "reflect":
         apply_boundaries_reflect(boundary_size)
     elif boundary_mode == "periodic":
@@ -1126,10 +1282,12 @@ def step(dt, coulomb_k, gravity_g, mag_field, e_field,
     detect_collisions(pair_threshold, c_light)
     monte_carlo_decay(dt, use_rel_i, c_light,
                       bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2])
+    # 6. Apply spawn queue (frozen=0), 7. Finalize (num_active += added)
     _apply_spawn_queue()
     _finalize_spawn()
     record_trails()
 
+    # 8. Leapfrog second half: forces (include new particles), half-kick, no drift
     if use_leapfrog:
         _call_forces(coulomb_k, gravity_g, mag_field, e_field,
                      strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos)
@@ -1151,6 +1309,9 @@ def refresh_stats(sel_idx=0):
     s = stats.to_numpy()
     cached_stats["ke"] = float(s[0])
     cached_stats["mom"] = float((s[1]**2 + s[2]**2 + s[3]**2)**0.5)
+    cached_stats["mom_x"] = float(s[1])
+    cached_stats["mom_y"] = float(s[2])
+    cached_stats["mom_z"] = float(s[3])
     cached_stats["collisions"] = int(s[4])
     cached_stats["decays"] = int(s[5])
     cached_stats["step"] = int(s[6])
@@ -1191,11 +1352,13 @@ def refresh_stats(sel_idx=0):
     cached_stats["inv_masses"] = [float(x) for x in im if x > 0.01]
 
 
-def prepare_render(base_r, r_scale, bh_on=False, bh_rs=0.0, bh_pos=(0.0, 0.0, 0.0)):
+def prepare_render(base_r, r_scale, bh_on=False, bh_rs=0.0, bh_pos=(0.0, 0.0, 0.0),
+                   hide_photons=False):
     bh_i = 1 if bh_on else 0
+    hp = 1 if hide_photons else 0
     build_render_data(base_r, r_scale, bh_i, bh_rs,
-                      bh_pos[0], bh_pos[1], bh_pos[2])
-    build_trail_lines(bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2])
+                      bh_pos[0], bh_pos[1], bh_pos[2], hp)
+    build_trail_lines(bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2], hp)
     if bh_on:
         bh_eh_pos[0] = ti.Vector([bh_pos[0], bh_pos[1], bh_pos[2]])
         bh_eh_color[0] = ti.Vector([0.0, 0.0, 0.0])

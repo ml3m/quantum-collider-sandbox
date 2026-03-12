@@ -57,6 +57,7 @@ class Renderer:
         self.paused = False
         self.show_trails = True
         self.show_flashes = True
+        self.show_photons = True
         self.dt = DT
         self.substeps = SUBSTEPS
         self.time_scale = 1.0
@@ -116,6 +117,17 @@ class Renderer:
         self.last_time = time.time()
         self.fps = 0.0
         self.frame_count = 0
+        self._preset_keys_prev = [False] * 11
+        self._preset_idx = 0
+
+    def _presets(self):
+        """Return list of preset methods (0-9)."""
+        return [
+            self._preset_rutherford, self._preset_cyclotron, self._preset_gas,
+            self._preset_two_beam, self._preset_black_hole, self._preset_lhc_pp,
+            self._preset_ee_annihilation, self._preset_physics_playground,
+            self._preset_virial_cluster, self._preset_minimal,
+        ]
 
     def handle_input(self) -> None:
         """Process keyboard input events."""
@@ -133,6 +145,8 @@ class Renderer:
                 self.show_trails = not self.show_trails
             elif key == 'f':
                 self.show_flashes = not self.show_flashes
+            elif key == 'y':
+                self.show_photons = not self.show_photons
             elif key == 'e':
                 out_dir = config.EXPORT_DIR
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -150,20 +164,24 @@ class Renderer:
             elif key == 'b':
                 self.bh_enabled = not self.bh_enabled
                 self._bh_ring_dirty = True
-            elif key == '1':
-                self._preset_rutherford()
-            elif key == '2':
-                self._preset_cyclotron()
-            elif key == '3':
-                self._preset_gas()
-            elif key == '4':
-                self._preset_two_beam()
-            elif key == '5':
-                self._preset_black_hole()
-            elif key == '6':
-                self._preset_lhc_pp()
-            elif key == '7':
-                self._preset_ee_annihilation()
+            elif (key in '1234567890' or
+                  (isinstance(key, int) and 48 <= key <= 57)):
+                k = chr(key) if isinstance(key, int) else key
+                idx = ord(k) - ord('1') if k != '0' else 9
+                if 0 <= idx <= 9:
+                    self._preset_idx = idx
+                    self._presets()[idx]()
+
+        # Fallback: number keys via is_pressed (works when get_event misses them)
+        for i in range(1, 11):
+            k = str(i) if i < 10 else '0'
+            if self.window.is_pressed(k):
+                if not self._preset_keys_prev[i]:
+                    self._preset_idx = i - 1
+                    self._presets()[i - 1]()
+                self._preset_keys_prev[i] = True
+            else:
+                self._preset_keys_prev[i] = False
 
     def fire_gun(self, real_dt: float) -> None:
         """Spawn particles from the gun at configured rate."""
@@ -195,16 +213,18 @@ class Renderer:
         sim.add_particle((5.0, 0.0, 0.0), (-6.0, -0.1, 0.0), ANTIPROTON)
 
     def _setup_demo(self):
-        sim.add_particle((-3.5, 0.0, 0.0), (3.0, 0.3, 0.0), PROTON)
-        sim.add_particle((3.5, 0.0, 0.0), (-3.0, -0.3, 0.0), ANTIPROTON)
-        sim.add_particle((0.0, 3.5, 0.0), (-1.2, -1.8, 0.0), PROTON)
-        sim.add_particle((0.0, -3.5, 0.0), (1.2, 1.8, 0.0), NEUTRON)
-        sim.add_particle((3.0, 3.0, 0.0), (-2.0, -1.0, 0.5), PI_PLUS)
-        sim.add_particle((-3.0, -3.0, 0.0), (2.0, 1.0, -0.5), PI_MINUS)
-        sim.add_particle((1.5, -2.0, 1.0), (-0.8, 1.5, -0.4), K_PLUS)
-        sim.add_particle((-1.5, 2.0, -1.0), (0.8, -1.5, 0.4), MUON_MINUS)
-        sim.add_particle((4.0, 1.0, 0.5), (-1.5, -0.5, 0.0), ELECTRON)
-        sim.add_particle((-4.0, -1.0, -0.5), (1.5, 0.5, 0.0), POSITRON)
+        # Projectiles that arc under gravity (vy initial upward)
+        sim.add_particle((-4.0, -2.0, 0.0), (3.0, 5.0, 0.2), PROTON)
+        sim.add_particle((4.0, -2.0, 0.0), (-3.0, 5.0, -0.2), ANTIPROTON)
+        sim.add_particle((-2.0, -3.0, 1.0), (2.0, 4.0, 0.0), PROTON)
+        sim.add_particle((2.0, -3.0, -1.0), (-2.0, 4.0, 0.0), NEUTRON)
+        # Particles affected by E-field (Ey>0) and B-field (Bz) - curved trajectories
+        sim.add_particle((0.0, 2.0, 0.0), (2.0, 0.0, 1.0), PI_PLUS)
+        sim.add_particle((0.0, -2.0, 0.0), (-2.0, 0.0, -1.0), PI_MINUS)
+        sim.add_particle((-3.0, 0.0, 2.0), (1.0, 3.0, -0.5), K_PLUS)
+        sim.add_particle((3.0, 0.0, -2.0), (-1.0, -3.0, 0.5), MUON_MINUS)
+        sim.add_particle((-1.0, 1.0, 0.0), (4.0, 2.0, 0.0), ELECTRON)
+        sim.add_particle((1.0, -1.0, 0.0), (-4.0, -2.0, 0.0), POSITRON)
 
     def _preset_rutherford(self):
         sim.init_simulation()
@@ -324,15 +344,93 @@ class Renderer:
             sim.add_particle((-6.0, y, 0.0), (speed, 0.0, 0.0), ELECTRON)
             sim.add_particle((6.0, -y, 0.0), (-speed, 0.0, 0.0), POSITRON)
 
+    def _preset_physics_playground(self):
+        """Gravity + E-field + B-field + relativity for visible physics effects."""
+        sim.init_simulation()
+        self.coulomb_k = 25.0
+        self.gravity_g = 6.0
+        self.mag_x = 0.0
+        self.mag_y = 0.0
+        self.mag_z = 5.0
+        self.ex = 0.0
+        self.ey = 2.0
+        self.ez = 0.0
+        self.strong_k = 0.0
+        self.use_relativity = True
+        self.synchro = 0.02
+        self.boundary_size = 10.0
+        for i in range(12):
+            angle = i * math.pi * 2.0 / 12
+            px = 4.0 * math.cos(angle)
+            pz = 4.0 * math.sin(angle)
+            vx = -2.0 * math.sin(angle) + 0.5
+            vz = 2.0 * math.cos(angle)
+            vy = 3.0 + (i % 3) * 1.5
+            sim.add_particle((px, -2.0, pz), (vx, vy, vz),
+                            [PROTON, ELECTRON, PI_PLUS][i % 3])
+
+    def _preset_virial_cluster(self):
+        """N-body virial cluster: ~80 particles in a gravitationally bound sphere.
+        Orbits, collisions, and slow evaporation. Pure gravity, no E/B."""
+        sim.init_simulation()
+        self.coulomb_k = 0.0
+        self.gravity_g = 18.0
+        self.mag_x = self.mag_y = self.mag_z = 0.0
+        self.ex = self.ey = self.ez = 0.0
+        self.strong_k = 0.0
+        self.use_relativity = False
+        self.boundary_size = 18.0
+        self.boundary_mode_idx = 0  # reflect
+
+        n = 80
+        radius = 4.5
+        v_rms = 2.2  # virial: 2*KE ~ |PE| gives roughly bound orbits
+
+        types = [PROTON, NEUTRON, PI_PLUS, PI_MINUS, K_PLUS, MUON_MINUS]
+        for i in range(n):
+            # Uniform random in sphere (rejection sampling)
+            while True:
+                x = (random.random() * 2 - 1) * radius
+                y = (random.random() * 2 - 1) * radius
+                z = (random.random() * 2 - 1) * radius
+                if x*x + y*y + z*z <= radius * radius:
+                    break
+            # Random velocity direction, magnitude from virial
+            theta = random.random() * 2 * math.pi
+            phi = math.acos(2 * random.random() - 1)
+            speed = v_rms * (0.6 + 0.8 * random.random())
+            vx = speed * math.sin(phi) * math.cos(theta)
+            vy = speed * math.sin(phi) * math.sin(theta)
+            vz = speed * math.cos(phi)
+            sim.add_particle((x, y, z), (vx, vy, vz), types[i % len(types)])
+
+    def _preset_minimal(self):
+        """Minimal: 2 particles head-on."""
+        sim.init_simulation()
+        self.coulomb_k = 20.0
+        self.gravity_g = 0.0
+        self.mag_x = self.mag_y = self.mag_z = 0.0
+        self.ex = self.ey = self.ez = 0.0
+        self.strong_k = 0.0
+        self.use_relativity = False
+        sim.add_particle((-4.0, 0.0, 0.0), (3.0, 0.0, 0.0), PROTON)
+        sim.add_particle((4.0, 0.0, 0.0), (-3.0, 0.0, 0.0), PROTON)
+
     def draw_gui(self) -> None:
-        """Draw ImGui control panels."""
+        """Draw ImGui control panels. Uses normalized coords (0-1) per Taichi API so
+        panels stay on left/right edges when resizing (imgui.ini deleted at startup)."""
         st = sim.cached_stats
         bmode = self.boundary_modes[self.boundary_mode_idx]
 
-        with self.gui.sub_window("Physics", 0.003, 0.003, 0.20, 0.58) as w:
-            self.dt = w.slider_float("Timestep", self.dt, 0.0001, 0.02)
+        # Layout: x,y,width,height all 0-1 relative to full window (Taichi sub_window API)
+        # Left column: x=0 (flush left). Right column: x=1-W, width W (flush right)
+        LW, RW = 0.20, 0.18  # left/right panel widths
+        RX = 1.0 - RW        # right column x = flush right
+
+        with self.gui.sub_window("Physics", 0.0, 0.0, LW, 0.58) as w:
+            self.dt = w.slider_float("Timestep", self.dt, 0.00001, 0.02)
             self.substeps = w.slider_int("Substeps", self.substeps, 1, 10)
-            self.time_scale = w.slider_float("Time x", self.time_scale, 0.1, 10.0)
+            self.time_scale = w.slider_float("Time x", self.time_scale, 0.01, 10.0)
             self.coulomb_k = w.slider_float("Coulomb", self.coulomb_k, 0.0, 200.0)
             self.gravity_g = w.slider_float("Gravity", self.gravity_g, 0.0, 80.0)
             self.strong_k = w.slider_float("Strong F", self.strong_k, 0.0, 100.0)
@@ -355,14 +453,17 @@ class Renderer:
             config.INTEGRATOR = "leapfrog" if integrator_idx == 1 else "euler"
             w.text("  0=Euler 1=Leapfrog")
 
-        with self.gui.sub_window("Boundary", 0.003, 0.59, 0.20, 0.12) as w:
+        with self.gui.sub_window("Boundary", 0.0, 0.59, LW, 0.14) as w:
             self.boundary_mode_idx = w.slider_int("Mode", self.boundary_mode_idx, 0, 2)
             w.text(f"  [{bmode}]")
             self.boundary_size = w.slider_float("Size", self.boundary_size, 3.0, 30.0)
             self.particle_size = w.slider_float("P.Size", self.particle_size, 0.02, 0.3)
             self.trail_width = w.slider_float("Trail W", self.trail_width, 0.5, 5.0)
+            if w.button("Photons ON" if self.show_photons else "Photons OFF"):
+                self.show_photons = not self.show_photons
+            w.text("  (Y key)")
 
-        with self.gui.sub_window("Black Hole", 0.003, 0.72, 0.20, 0.17) as w:
+        with self.gui.sub_window("Black Hole", 0.0, 0.72, LW, 0.17) as w:
             bh_int = w.slider_int("BH On", 1 if self.bh_enabled else 0, 0, 1)
             old_bh = self.bh_enabled
             self.bh_enabled = bh_int == 1
@@ -381,7 +482,7 @@ class Renderer:
                 self._bh_ring_dirty = True
                 self._disk_initialized = False
 
-        with self.gui.sub_window("Spawn", 0.003, 0.90, 0.20, 0.095) as w:
+        with self.gui.sub_window("Spawn", 0.0, 0.90, 0.20, 0.095) as w:
             spawn_idx = (
                 self._spawn_ids.index(self.spawn_type)
                 if self.spawn_type in self._spawn_ids
@@ -408,7 +509,7 @@ class Renderer:
             if w.button("Collision"):
                 self._trigger_collision_demo()
 
-        with self.gui.sub_window("Stats", 0.795, 0.003, 0.202, 0.38) as w:
+        with self.gui.sub_window("Stats", RX, 0.0, RW, 0.38) as w:
             status = "PAUSED" if self.paused else "RUNNING"
             gun_str = "  GUN ON" if self.gun_enabled else ""
             w.text(f"{status}  FPS:{self.fps:.0f}{gun_str}")
@@ -425,13 +526,13 @@ class Renderer:
             w.text(f"|P|: {st.get('mom',0):.3f}")
             w.text(f"Avg speed: {st.get('avg_speed',0):.2f}")
 
-        with self.gui.sub_window("Census", 0.795, 0.39, 0.202, 0.22) as w:
+        with self.gui.sub_window("Census", RX, 0.39, RW, 0.22) as w:
             for i in range(NUM_TYPES):
                 cnt = st.get(f"type_{i}", 0)
                 if cnt > 0:
                     w.text(f"{self.type_names[i]}: {cnt}")
 
-        with self.gui.sub_window("Inspector", 0.795, 0.62, 0.202, 0.20) as w:
+        with self.gui.sub_window("Inspector", RX, 0.62, RW, 0.20) as w:
             w.text(f"Sel #{self.selected_particle} (TAB cycle, P pin)")
             sel_t = int(st.get('sel_type', 0))
             has_particles = st.get("particles", 0) > 0
@@ -457,7 +558,7 @@ class Renderer:
                 lt_str = "stable" if lt > 1e20 else f"{lt:.2e}s"
                 w.text(f"{mass_mev:.2f} MeV  {lt_str}")
 
-        with self.gui.sub_window("Gun/Presets", 0.795, 0.83, 0.202, 0.165) as w:
+        with self.gui.sub_window("Gun/Presets", RX, 0.83, RW, 0.165) as w:
             gun_int = w.slider_int("Gun", 1 if self.gun_enabled else 0, 0, 1)
             self.gun_enabled = gun_int == 1
             gun_idx = (
@@ -469,11 +570,22 @@ class Renderer:
             self.gun_type = self._spawn_ids[gun_idx]
             self.gun_speed = w.slider_float("G.Spd", self.gun_speed, 1.0, 20.0)
             self.gun_rate = w.slider_float("G.Rate", self.gun_rate, 1.0, 60.0)
-            w.text("1=Ruth 2=Cycl 3=Gas 4=Beam")
-            w.text("5=BH 6=LHC 7=e+e-")
+            w.text("Presets (keys 1-9,0):")
+            preset_names = ["1 Ruth", "2 Cycl", "3 Gas", "4 Beam", "5 BH",
+                           "6 LHC", "7 e+e-", "8 Play", "9 N-body", "0 Min"]
+            for i, name in enumerate(preset_names):
+                if w.button(name):
+                    self._preset_idx = i
+                    self._presets()[i]()
 
     def render(self) -> None:
         """Render one frame: particles, trails, black hole, GUI."""
+        n = sim.num_active[None]
+        if n > 0:
+            self.selected_particle = max(0, min(self.selected_particle, n - 1))
+        else:
+            self.selected_particle = 0
+
         self.frame_count += 1
         now = time.time()
         dt = now - self.last_time
@@ -494,7 +606,8 @@ class Renderer:
         bh_rs = 2.0 * self.bh_mass / (self.c_light * self.c_light) if self.bh_enabled else 0.0
         bh_pos_tup = (self.bh_x, self.bh_y, self.bh_z)
         sim.prepare_render(self.particle_size, PARTICLE_RADIUS_SCALE,
-                           self.bh_enabled, bh_rs, bh_pos_tup)
+                           self.bh_enabled, bh_rs, bh_pos_tup,
+                           hide_photons=not self.show_photons)
 
         self.scene.particles(
             sim.star_pos, radius=0.06,

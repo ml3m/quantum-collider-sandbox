@@ -57,11 +57,13 @@ from .pdg_table import (
     K_PLUS,
     MUON_MINUS,
     NEUTRON,
-    PARTICLES as PDG_PARTICLES,
     PI_MINUS,
     PI_PLUS,
     POSITRON,
     PROTON,
+)
+from .pdg_table import (
+    PARTICLES as PDG_PARTICLES,
 )
 from .renderer import Renderer
 from .simulation import (
@@ -198,9 +200,7 @@ def main() -> None:
             if frame % 10 == 0:
                 refresh_stats(renderer.selected_particle)
                 if log_file is not None:
-                    sub_dt = (
-                        renderer.dt * renderer.time_scale / renderer.substeps
-                    )
+                    sub_dt = renderer.dt * renderer.time_scale / renderer.substeps
                     sim_time = step_counter[None] * sub_dt
                     entry = {
                         "step": cached_stats.get("step", 0),

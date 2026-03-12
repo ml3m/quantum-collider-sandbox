@@ -15,7 +15,6 @@ from .config import (
     SOFTENING,
     TRAIL_LENGTH,
 )
-from .pdg_table import PHOTON
 from .particles import (
     channel_branch_cumulative,
     channel_num_products,
@@ -29,6 +28,7 @@ from .particles import (
     type_mass,
     type_radius,
 )
+from .pdg_table import PHOTON
 
 MAX_FLASHES = 256
 INV_MASS_BUF = 64
@@ -36,14 +36,14 @@ INV_MASS_BUF = 64
 # ── stats array layout ───────────────────────────────────────────────────
 # 0:ke 1-3:mom 4:collisions 5:decays 6:step 7:n_active
 # 8..(8+NUM_TYPES-1): per-type counts
-_S_ANN   = 8 + NUM_TYPES       # 56
-_S_PAIR  = _S_ANN + 1          # 57
-_S_DHIT  = _S_PAIR + 1         # 58
-_S_DENE  = _S_DHIT + 1         # 59
-_S_ASPD  = _S_DENE + 1         # 60
-_S_BHC   = _S_ASPD + 1         # 61
-_S_SEL   = _S_BHC + 1          # 62  (12 slots: px py pz vx vy vz m q type ke frozen speed)
-NUM_STATS = _S_SEL + 12        # 74
+_S_ANN = 8 + NUM_TYPES  # 56
+_S_PAIR = _S_ANN + 1  # 57
+_S_DHIT = _S_PAIR + 1  # 58
+_S_DENE = _S_DHIT + 1  # 59
+_S_ASPD = _S_DENE + 1  # 60
+_S_BHC = _S_ASPD + 1  # 61
+_S_SEL = _S_BHC + 1  # 62  (12 slots: px py pz vx vy vz m q type ke frozen speed)
+NUM_STATS = _S_SEL + 12  # 74
 
 pos = ti.Vector.field(3, dtype=ti.f32, shape=MAX_PARTICLES)
 vel = ti.Vector.field(3, dtype=ti.f32, shape=MAX_PARTICLES)
@@ -116,17 +116,51 @@ _compact_count = ti.field(dtype=ti.i32, shape=())
 _needs_compact = ti.field(dtype=ti.i32, shape=())
 
 cached_stats = {}
-time_series = {"step": [], "ke": [], "particles": [], "collisions": [], "decays": [],
-               "annihilations": [], "pair_creations": [], "momentum": []}
+time_series = {
+    "step": [],
+    "ke": [],
+    "particles": [],
+    "collisions": [],
+    "decays": [],
+    "annihilations": [],
+    "pair_creations": [],
+    "momentum": [],
+}
 
 
 def _reset_cached() -> None:
     """Reset cached statistics to zero."""
-    keys = ["ke", "mom", "mom_x", "mom_y", "mom_z", "collisions", "decays", "step", "particles",
-            "annihilations", "pair_creations", "detector_hits", "detector_energy",
-            "avg_speed", "total_pe", "flash_rc", "bh_captures",
-            "sel_px", "sel_py", "sel_pz", "sel_vx", "sel_vy", "sel_vz",
-            "sel_mass", "sel_charge", "sel_type", "sel_ke", "sel_frozen", "sel_speed"]
+    keys = [
+        "ke",
+        "mom",
+        "mom_x",
+        "mom_y",
+        "mom_z",
+        "collisions",
+        "decays",
+        "step",
+        "particles",
+        "annihilations",
+        "pair_creations",
+        "detector_hits",
+        "detector_energy",
+        "avg_speed",
+        "total_pe",
+        "flash_rc",
+        "bh_captures",
+        "sel_px",
+        "sel_py",
+        "sel_pz",
+        "sel_vx",
+        "sel_vy",
+        "sel_vz",
+        "sel_mass",
+        "sel_charge",
+        "sel_type",
+        "sel_ke",
+        "sel_frozen",
+        "sel_speed",
+    ]
     for k in keys:
         cached_stats[k] = 0.0
     for i in range(NUM_TYPES):
@@ -190,12 +224,24 @@ def add_particle(position, velocity, particle_type, is_frozen=False):  # noqa: P
 
 
 @ti.kernel
-def compute_forces(coulomb_k: ti.f32, gravity_g: ti.f32,
-                   bx: ti.f32, by: ti.f32, bz: ti.f32,
-                   ex: ti.f32, ey: ti.f32, ez: ti.f32,
-                   strong_k: ti.f32, strong_range: ti.f32,
-                   bh_on: ti.i32, bh_gm: ti.f32, bh_rs: ti.f32,
-                   bhx: ti.f32, bhy: ti.f32, bhz: ti.f32):
+def compute_forces(
+    coulomb_k: ti.f32,
+    gravity_g: ti.f32,
+    bx: ti.f32,
+    by: ti.f32,
+    bz: ti.f32,
+    ex: ti.f32,
+    ey: ti.f32,
+    ez: ti.f32,
+    strong_k: ti.f32,
+    strong_range: ti.f32,
+    bh_on: ti.i32,
+    bh_gm: ti.f32,
+    bh_rs: ti.f32,
+    bhx: ti.f32,
+    bhy: ti.f32,
+    bhz: ti.f32,
+):
     n = num_active[None]
     mag_field = ti.Vector([bx, by, bz])
     e_field = ti.Vector([ex, ey, ez])
@@ -338,9 +384,11 @@ def apply_boundaries_periodic(bound: ti.f32):
 
 # ── Relativistic kinematics helpers ───────────────────────────────────────
 
+
 @ti.func
-def _boost_to_lab(E_star: ti.f32, p_star_vec: ti.template(),
-                  parent_vel: ti.template(), c_light: ti.f32) -> ti.template():
+def _boost_to_lab(
+    E_star: ti.f32, p_star_vec: ti.template(), parent_vel: ti.template(), c_light: ti.f32
+) -> ti.template():
     """Lorentz boost from parent rest frame to lab frame, returns velocity."""
     v_sq = parent_vel.norm_sqr()
     c_sq = c_light * c_light
@@ -382,8 +430,7 @@ def _random_dir() -> ti.template():
 
 
 @ti.func
-def cm_decay_2body(M: ti.f32, m1: ti.f32, m2: ti.f32,
-                   parent_vel: ti.template(), c_light: ti.f32):
+def cm_decay_2body(M: ti.f32, m1: ti.f32, m2: ti.f32, parent_vel: ti.template(), c_light: ti.f32):
     """2-body decay M -> m1 + m2 with proper CM kinematics + Lorentz boost.
     All masses in sim units. Returns (v1_lab, v2_lab)."""
     sum_m = m1 + m2
@@ -403,8 +450,9 @@ def cm_decay_2body(M: ti.f32, m1: ti.f32, m2: ti.f32,
 
 
 @ti.func
-def cm_decay_3body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32,
-                   parent_vel: ti.template(), c_light: ti.f32):
+def cm_decay_3body(
+    M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, parent_vel: ti.template(), c_light: ti.f32
+):
     """3-body decay via recursive 2-body: M -> d1 + virtual(m23), virtual -> d2 + d3.
     Invariant mass m23 sampled from phase space."""
     m23_min = m2 + m3 + 1e-6
@@ -417,8 +465,15 @@ def cm_decay_3body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32,
 
 
 @ti.func
-def cm_decay_4body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, m4: ti.f32,
-                   parent_vel: ti.template(), c_light: ti.f32):
+def cm_decay_4body(
+    M: ti.f32,
+    m1: ti.f32,
+    m2: ti.f32,
+    m3: ti.f32,
+    m4: ti.f32,
+    parent_vel: ti.template(),
+    c_light: ti.f32,
+):
     """4-body decay via recursive 2-body: M -> (m1+m2) + (m3+m4), each 2-body."""
     m12_min = m1 + m2 + 1e-6
     m12_max = M - m3 - m4 - 1e-6
@@ -432,8 +487,16 @@ def cm_decay_4body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, m4: ti.f32,
 
 
 @ti.func
-def cm_decay_5body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, m4: ti.f32, m5: ti.f32,
-                   parent_vel: ti.template(), c_light: ti.f32):
+def cm_decay_5body(
+    M: ti.f32,
+    m1: ti.f32,
+    m2: ti.f32,
+    m3: ti.f32,
+    m4: ti.f32,
+    m5: ti.f32,
+    parent_vel: ti.template(),
+    c_light: ti.f32,
+):
     """5-body decay via recursive 2-body + 3-body: M -> (m1+m2) + (m3+m4+m5)."""
     m12_min = m1 + m2 + 1e-6
     m12_max = M - m3 - m4 - m5 - 1e-6
@@ -447,6 +510,7 @@ def cm_decay_5body(M: ti.f32, m1: ti.f32, m2: ti.f32, m3: ti.f32, m4: ti.f32, m5
 
 
 # ── Collision detection ───────────────────────────────────────────────────
+
 
 @ti.kernel
 def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
@@ -545,8 +609,9 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     m3 = type_mass[pt3]
                     m4 = type_mass[pt4]
                     m5 = type_mass[pt5]
-                    v1, v2, v3, v4, v5 = cm_decay_5body(inv_m, m1, m2, m3, m4, m5,
-                                                        parent_vel_c, c_light)
+                    v1, v2, v3, v4, v5 = cm_decay_5body(
+                        inv_m, m1, m2, m3, m4, m5, parent_vel_c, c_light
+                    )
                     rd1 = _random_dir()
                     rd2 = _random_dir()
                     rd3 = _random_dir()
@@ -618,8 +683,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     elif rp < 0.66:
                         pt4 = 19
                     m1, m2, m3, m4 = type_mass[pt1], type_mass[pt2], type_mass[pt3], type_mass[pt4]
-                    v1, v2, v3, v4 = cm_decay_4body(inv_m, m1, m2, m3, m4,
-                                                   parent_vel_c, c_light)
+                    v1, v2, v3, v4 = cm_decay_4body(inv_m, m1, m2, m3, m4, parent_vel_c, c_light)
                     rd1 = _random_dir()
                     rd2 = _random_dir()
                     rd3 = _random_dir()
@@ -686,12 +750,12 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                                 if s1 < MAX_PARTICLES:
                                     spawn_queue_pos[s1] = c + rd * 0.15
                                     spawn_queue_vel[s1] = rd * speed
-                                    spawn_queue_type[s1] = 0   # electron
+                                    spawn_queue_type[s1] = 0  # electron
                                 s2 = ti.atomic_add(spawn_count[None], 1)
                                 if s2 < MAX_PARTICLES:
                                     spawn_queue_pos[s2] = c - rd * 0.15
                                     spawn_queue_vel[s2] = -rd * speed
-                                    spawn_queue_type[s2] = 1   # positron
+                                    spawn_queue_type[s2] = 1  # positron
                                 ti.atomic_add(pair_creation_count_acc[None], 1)
                                 ratio = creation_cost / (combined_ke + 1e-8)
                                 factor = ti.sqrt(ti.max(1.0 - ratio, 0.1))
@@ -716,10 +780,18 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
 
 # ── Monte Carlo decay with proper exponential law + relativistic kinematics ──
 
+
 @ti.kernel
-def monte_carlo_decay(dt: ti.f32, use_rel: ti.i32, c_light: ti.f32,
-                      bh_on: ti.i32, bh_rs: ti.f32,
-                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32):
+def monte_carlo_decay(
+    dt: ti.f32,
+    use_rel: ti.i32,
+    c_light: ti.f32,
+    bh_on: ti.i32,
+    bh_rs: ti.f32,
+    bhx: ti.f32,
+    bhy: ti.f32,
+    bhz: ti.f32,
+):
     n = num_active[None]
     bh_p = ti.Vector([bhx, bhy, bhz])
     for i in range(n):
@@ -874,6 +946,7 @@ def monte_carlo_decay(dt: ti.f32, use_rel: ti.i32, c_light: ti.f32,
 
 # ── Spawn / compact ──────────────────────────────────────────────────────
 
+
 @ti.kernel
 def _apply_spawn_queue():
     """Apply spawn queue: collision/decay products. All spawns get frozen=0 (never frozen).
@@ -977,6 +1050,7 @@ def record_trails():
 
 # ── Statistics ────────────────────────────────────────────────────────────
 
+
 @ti.kernel
 def _compute_stats(sel_idx: ti.i32):
     n = num_active[None]
@@ -1036,11 +1110,18 @@ def _compute_stats(sel_idx: ti.i32):
 
 # ── Render helpers ────────────────────────────────────────────────────────
 
+
 @ti.kernel
-def build_render_data(base_r: ti.f32, r_scale: ti.f32,
-                      bh_on: ti.i32, bh_rs: ti.f32,
-                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32,
-                      hide_photons: ti.i32):
+def build_render_data(
+    base_r: ti.f32,
+    r_scale: ti.f32,
+    bh_on: ti.i32,
+    bh_rs: ti.f32,
+    bhx: ti.f32,
+    bhy: ti.f32,
+    bhz: ti.f32,
+    hide_photons: ti.i32,
+):
     n = num_active[None]
     bh_p = ti.Vector([bhx, bhy, bhz])
     render_count[None] = 0
@@ -1067,8 +1148,9 @@ def build_render_data(base_r: ti.f32, r_scale: ti.f32,
 
 
 @ti.func
-def _deflect_pos(p: ti.template(), bh_p: ti.template(),
-                 bh_rs: ti.f32, bh_on: ti.i32) -> ti.template():
+def _deflect_pos(
+    p: ti.template(), bh_p: ti.template(), bh_rs: ti.f32, bh_on: ti.i32
+) -> ti.template():
     result = p
     if bh_on == 1:
         to_bh = bh_p - p
@@ -1081,9 +1163,9 @@ def _deflect_pos(p: ti.template(), bh_p: ti.template(),
 
 
 @ti.kernel
-def build_trail_lines(bh_on: ti.i32, bh_rs: ti.f32,
-                      bhx: ti.f32, bhy: ti.f32, bhz: ti.f32,
-                      hide_photons: ti.i32):
+def build_trail_lines(
+    bh_on: ti.i32, bh_rs: ti.f32, bhx: ti.f32, bhy: ti.f32, bhz: ti.f32, hide_photons: ti.i32
+):
     trail_line_count[None] = 0
     n = num_active[None]
     bh_p = ti.Vector([bhx, bhy, bhz])
@@ -1123,21 +1205,25 @@ def build_bh_ring(bhx: ti.f32, bhy: ti.f32, bhz: ti.f32, bh_rs: ti.f32):
             y_frac = 1.0 - 2.0 * (ti.cast(i, ti.f32) + 0.5) / ti.cast(half, ti.f32)
             r_lat = ti.sqrt(ti.max(1.0 - y_frac * y_frac, 0.0))
             theta = 2.39996 * ti.cast(i, ti.f32)
-            bh_ring_pos[i] = ti.Vector([
-                bhx + r_shadow * r_lat * ti.cos(theta),
-                bhy + r_shadow * y_frac,
-                bhz + r_shadow * r_lat * ti.sin(theta),
-            ])
+            bh_ring_pos[i] = ti.Vector(
+                [
+                    bhx + r_shadow * r_lat * ti.cos(theta),
+                    bhy + r_shadow * y_frac,
+                    bhz + r_shadow * r_lat * ti.sin(theta),
+                ]
+            )
             brightness = 0.75 + 0.25 * ti.abs(y_frac)
             bh_ring_color[i] = ti.Vector([1.0, 0.92, 0.75]) * brightness
         else:
             angle = ti.cast(i - half, ti.f32) * 6.28318 / ti.cast(half, ti.f32)
             r_glow = r_shadow * 1.3
-            bh_ring_pos[i] = ti.Vector([
-                bhx + r_glow * ti.cos(angle),
-                bhy,
-                bhz + r_glow * ti.sin(angle),
-            ])
+            bh_ring_pos[i] = ti.Vector(
+                [
+                    bhx + r_glow * ti.cos(angle),
+                    bhy,
+                    bhz + r_glow * ti.sin(angle),
+                ]
+            )
             brightness = 0.4 + 0.2 * ti.sin(angle * 5.0)
             bh_ring_color[i] = ti.Vector([1.0, 0.6, 0.15]) * brightness
 
@@ -1148,11 +1234,13 @@ def init_bg_stars():
         theta = ti.random(ti.f32) * 6.28318
         phi = ti.acos(2.0 * ti.random(ti.f32) - 1.0)
         r = 55.0 + ti.random(ti.f32) * 35.0
-        star_pos[i] = ti.Vector([
-            r * ti.sin(phi) * ti.cos(theta),
-            r * ti.sin(phi) * ti.sin(theta),
-            r * ti.cos(phi),
-        ])
+        star_pos[i] = ti.Vector(
+            [
+                r * ti.sin(phi) * ti.cos(theta),
+                r * ti.sin(phi) * ti.sin(theta),
+                r * ti.cos(phi),
+            ]
+        )
         brightness = 0.2 + ti.random(ti.f32) * 0.8
         brightness = brightness * brightness
         temp = ti.random(ti.f32)
@@ -1167,8 +1255,7 @@ def init_bg_stars():
 
 
 @ti.kernel
-def init_accretion_disk(bhx: ti.f32, bhy: ti.f32, bhz: ti.f32,
-                        bh_gm: ti.f32, bh_rs: ti.f32):
+def init_accretion_disk(bhx: ti.f32, bhy: ti.f32, bhz: ti.f32, bh_gm: ti.f32, bh_rs: ti.f32):
     r_isco = 3.0 * bh_rs
     r_outer = 14.0 * bh_rs
     for i in range(DISK_N):
@@ -1176,22 +1263,27 @@ def init_accretion_disk(bhx: ti.f32, bhy: ti.f32, bhz: ti.f32,
         r = r_isco + t * t * (r_outer - r_isco)
         angle = ti.random(ti.f32) * 6.28318
         dy = (ti.random(ti.f32) - 0.5) * 0.12 * bh_rs
-        disk_pos[i] = ti.Vector([
-            bhx + r * ti.cos(angle),
-            bhy + dy,
-            bhz + r * ti.sin(angle),
-        ])
+        disk_pos[i] = ti.Vector(
+            [
+                bhx + r * ti.cos(angle),
+                bhy + dy,
+                bhz + r * ti.sin(angle),
+            ]
+        )
         v_c = ti.sqrt(bh_gm * r) / (r - bh_rs + 0.01)
-        disk_vel[i] = ti.Vector([
-            -v_c * ti.sin(angle),
-            0.0,
-            v_c * ti.cos(angle),
-        ])
+        disk_vel[i] = ti.Vector(
+            [
+                -v_c * ti.sin(angle),
+                0.0,
+                v_c * ti.cos(angle),
+            ]
+        )
 
 
 @ti.kernel
-def update_accretion_disk(dt: ti.f32, bh_gm: ti.f32, bh_rs: ti.f32,
-                          bhx: ti.f32, bhy: ti.f32, bhz: ti.f32):
+def update_accretion_disk(
+    dt: ti.f32, bh_gm: ti.f32, bh_rs: ti.f32, bhx: ti.f32, bhy: ti.f32, bhz: ti.f32
+):
     bh = ti.Vector([bhx, bhy, bhz])
     r_isco = 3.0 * bh_rs
     r_outer = 14.0 * bh_rs
@@ -1201,11 +1293,13 @@ def update_accretion_disk(dt: ti.f32, bh_gm: ti.f32, bh_rs: ti.f32,
         if r < bh_rs:
             angle = ti.random(ti.f32) * 6.28318
             r_new = r_outer * (0.7 + ti.random(ti.f32) * 0.3)
-            disk_pos[i] = ti.Vector([
-                bhx + r_new * ti.cos(angle),
-                bhy + (ti.random(ti.f32) - 0.5) * 0.12 * bh_rs,
-                bhz + r_new * ti.sin(angle),
-            ])
+            disk_pos[i] = ti.Vector(
+                [
+                    bhx + r_new * ti.cos(angle),
+                    bhy + (ti.random(ti.f32) - 0.5) * 0.12 * bh_rs,
+                    bhz + r_new * ti.sin(angle),
+                ]
+            )
             v_c = ti.sqrt(bh_gm * r_new) / (r_new - bh_rs + 0.01)
             disk_vel[i] = ti.Vector([-v_c * ti.sin(angle), 0.0, v_c * ti.cos(angle)])
             r = r_new
@@ -1238,23 +1332,50 @@ def update_accretion_disk(dt: ti.f32, bh_gm: ti.f32, bh_rs: ti.f32,
 
 # ── Main step / maintenance / stats ───────────────────────────────────────
 
-def _call_forces(coulomb_k, gravity_g, mag_field, e_field, strong_k, strong_range,
-                 bh_i, bh_gm, bh_rs, bh_pos):
+
+def _call_forces(
+    coulomb_k, gravity_g, mag_field, e_field, strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos
+):
     """Compute forces from current positions."""
     compute_forces(
-        coulomb_k, gravity_g,
-        mag_field[0], mag_field[1], mag_field[2],
-        e_field[0], e_field[1], e_field[2],
-        strong_k, strong_range,
-        bh_i, bh_gm, bh_rs,
-        bh_pos[0], bh_pos[1], bh_pos[2],
+        coulomb_k,
+        gravity_g,
+        mag_field[0],
+        mag_field[1],
+        mag_field[2],
+        e_field[0],
+        e_field[1],
+        e_field[2],
+        strong_k,
+        strong_range,
+        bh_i,
+        bh_gm,
+        bh_rs,
+        bh_pos[0],
+        bh_pos[1],
+        bh_pos[2],
     )
 
 
-def step(dt, coulomb_k, gravity_g, mag_field, e_field,
-         strong_k, strong_range, use_rel, c_light, synchro,
-         boundary_mode, boundary_size, pair_threshold,
-         bh_on=False, bh_gm=0.0, bh_rs=0.0, bh_pos=(0., 0., 0.)):
+def step(
+    dt,
+    coulomb_k,
+    gravity_g,
+    mag_field,
+    e_field,
+    strong_k,
+    strong_range,
+    use_rel,
+    c_light,
+    synchro,
+    boundary_mode,
+    boundary_size,
+    pair_threshold,
+    bh_on=False,
+    bh_gm=0.0,
+    bh_rs=0.0,
+    bh_pos=(0.0, 0.0, 0.0),
+):
     """Leapfrog: half-kick -> drift -> collisions/decay/spawn -> half-kick.
     Spawned particles get forces + half-kick in same step (num_active updated before 2nd forces)."""
     bh_i = 1 if bh_on else 0
@@ -1263,15 +1384,14 @@ def step(dt, coulomb_k, gravity_g, mag_field, e_field,
     use_leapfrog = _config.INTEGRATOR == "leapfrog"
 
     # 1. Forces, 2. Half-kick + drift (Leapfrog) or full Euler step
-    _call_forces(coulomb_k, gravity_g, mag_field, e_field,
-                 strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos)
+    _call_forces(
+        coulomb_k, gravity_g, mag_field, e_field, strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos
+    )
 
     if use_leapfrog:
-        _integrate_step(dt * 0.5, dt, use_rel_i, c_light, synchro,
-                       bh_i, bh_rs, *bh_xyz)
+        _integrate_step(dt * 0.5, dt, use_rel_i, c_light, synchro, bh_i, bh_rs, *bh_xyz)
     else:
-        _integrate_step(dt, dt, use_rel_i, c_light, synchro,
-                       bh_i, bh_rs, *bh_xyz)
+        _integrate_step(dt, dt, use_rel_i, c_light, synchro, bh_i, bh_rs, *bh_xyz)
 
     # 3. Boundaries, 4. Collisions (may spawn), 5. Decay (may spawn)
     if boundary_mode == "reflect":
@@ -1280,8 +1400,7 @@ def step(dt, coulomb_k, gravity_g, mag_field, e_field,
         apply_boundaries_periodic(boundary_size)
 
     detect_collisions(pair_threshold, c_light)
-    monte_carlo_decay(dt, use_rel_i, c_light,
-                      bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2])
+    monte_carlo_decay(dt, use_rel_i, c_light, bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2])
     # 6. Apply spawn queue (frozen=0), 7. Finalize (num_active += added)
     _apply_spawn_queue()
     _finalize_spawn()
@@ -1289,10 +1408,19 @@ def step(dt, coulomb_k, gravity_g, mag_field, e_field,
 
     # 8. Leapfrog second half: forces (include new particles), half-kick, no drift
     if use_leapfrog:
-        _call_forces(coulomb_k, gravity_g, mag_field, e_field,
-                     strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos)
-        _integrate_step(dt * 0.5, 0.0, use_rel_i, c_light, synchro,
-                       bh_i, bh_rs, *bh_xyz)
+        _call_forces(
+            coulomb_k,
+            gravity_g,
+            mag_field,
+            e_field,
+            strong_k,
+            strong_range,
+            bh_i,
+            bh_gm,
+            bh_rs,
+            bh_pos,
+        )
+        _integrate_step(dt * 0.5, 0.0, use_rel_i, c_light, synchro, bh_i, bh_rs, *bh_xyz)
 
     step_counter[None] += 1
 
@@ -1308,7 +1436,7 @@ def refresh_stats(sel_idx=0):
     _compute_stats(sel_idx)
     s = stats.to_numpy()
     cached_stats["ke"] = float(s[0])
-    cached_stats["mom"] = float((s[1]**2 + s[2]**2 + s[3]**2)**0.5)
+    cached_stats["mom"] = float((s[1] ** 2 + s[2] ** 2 + s[3] ** 2) ** 0.5)
     cached_stats["mom_x"] = float(s[1])
     cached_stats["mom_y"] = float(s[2])
     cached_stats["mom_z"] = float(s[3])
@@ -1352,12 +1480,12 @@ def refresh_stats(sel_idx=0):
     cached_stats["inv_masses"] = [float(x) for x in im if x > 0.01]
 
 
-def prepare_render(base_r, r_scale, bh_on=False, bh_rs=0.0, bh_pos=(0.0, 0.0, 0.0),
-                   hide_photons=False):
+def prepare_render(
+    base_r, r_scale, bh_on=False, bh_rs=0.0, bh_pos=(0.0, 0.0, 0.0), hide_photons=False
+):
     bh_i = 1 if bh_on else 0
     hp = 1 if hide_photons else 0
-    build_render_data(base_r, r_scale, bh_i, bh_rs,
-                      bh_pos[0], bh_pos[1], bh_pos[2], hp)
+    build_render_data(base_r, r_scale, bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2], hp)
     build_trail_lines(bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2], hp)
     if bh_on:
         bh_eh_pos[0] = ti.Vector([bh_pos[0], bh_pos[1], bh_pos[2]])
@@ -1384,16 +1512,16 @@ def export_state(filepath: str) -> None:
         charges[i] = float(charge[i])
         types[i] = int(ptype[i])
 
-    with h5py.File(filepath, 'w') as f:
-        f.create_dataset('positions', data=positions)
-        f.create_dataset('velocities', data=velocities)
-        f.create_dataset('masses', data=masses)
-        f.create_dataset('charges', data=charges)
-        f.create_dataset('types', data=types)
-        f.attrs['num_particles'] = n
+    with h5py.File(filepath, "w") as f:
+        f.create_dataset("positions", data=positions)
+        f.create_dataset("velocities", data=velocities)
+        f.create_dataset("masses", data=masses)
+        f.create_dataset("charges", data=charges)
+        f.create_dataset("types", data=types)
+        f.attrs["num_particles"] = n
 
         for key, vals in time_series.items():
             if vals:
-                f.create_dataset(f'timeseries/{key}', data=np.array(vals, dtype=np.float32))
+                f.create_dataset(f"timeseries/{key}", data=np.array(vals, dtype=np.float32))
 
     print(f"Exported {n} particles + time series to {filepath}")

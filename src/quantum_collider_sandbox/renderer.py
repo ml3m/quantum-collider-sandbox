@@ -7,19 +7,39 @@ import time
 import taichi as ti
 
 from . import config
+from . import simulation as sim
 from .config import (
     BACKGROUND_COLOR,
+    BASE_PARTICLE_RADIUS,
+    BH_MASS,
+    BOUNDARY_MODE,
+    BOUNDARY_SIZE,
+    CAMERA_FOV,
+    CAMERA_LOOKAT,
+    CAMERA_POS,
+    COULOMB_K,
+    DT,
+    E_FIELD,
+    GRAVITY_G,
+    MAGNETIC_FIELD,
+    MAX_PARTICLES,
+    NUM_TYPES,
+    PAIR_CREATION_THRESHOLD,
+    PARTICLE_RADIUS_SCALE,
+    SPEED_OF_LIGHT,
+    STRONG_FORCE_K,
+    STRONG_FORCE_RANGE,
+    SUBSTEPS,
+    SYNCHROTRON_COEFF,
+    TRAIL_LENGTH,
     TRAIL_WIDTH,
-    WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
-    CAMERA_POS, CAMERA_LOOKAT, CAMERA_FOV,
-    BASE_PARTICLE_RADIUS, PARTICLE_RADIUS_SCALE,
-    TRAIL_LENGTH, MAX_PARTICLES, NUM_TYPES,
-    DT, SUBSTEPS, COULOMB_K, GRAVITY_G, MAGNETIC_FIELD, E_FIELD,
-    STRONG_FORCE_K, STRONG_FORCE_RANGE, SPEED_OF_LIGHT,
-    USE_RELATIVITY, SYNCHROTRON_COEFF, PAIR_CREATION_THRESHOLD,
-    BOUNDARY_MODE, BOUNDARY_SIZE, BH_MASS,
+    USE_RELATIVITY,
+    WINDOW_HEIGHT,
+    WINDOW_TITLE,
+    WINDOW_WIDTH,
 )
 from .pdg_table import (
+    ANTIPROTON,
     DELTA_PP,
     ELECTRON,
     K_MINUS,
@@ -27,16 +47,16 @@ from .pdg_table import (
     MUON_MINUS,
     MUON_PLUS,
     NEUTRON,
-    PARTICLES as PDG_PARTICLES,
     PHOTON,
     PI_MINUS,
     PI_PLUS,
     PI_ZERO,
     POSITRON,
     PROTON,
-    ANTIPROTON,
 )
-from . import simulation as sim
+from .pdg_table import (
+    PARTICLES as PDG_PARTICLES,
+)
 
 
 class Renderer:
@@ -44,7 +64,9 @@ class Renderer:
 
     def __init__(self):
         self.window = ti.ui.Window(
-            WINDOW_TITLE, (WINDOW_WIDTH, WINDOW_HEIGHT), vsync=True,
+            WINDOW_TITLE,
+            (WINDOW_WIDTH, WINDOW_HEIGHT),
+            vsync=True,
         )
         self.canvas = self.window.get_canvas()
         self.scene = self.window.get_scene()
@@ -123,10 +145,16 @@ class Renderer:
     def _presets(self):
         """Return list of preset methods (0-9)."""
         return [
-            self._preset_rutherford, self._preset_cyclotron, self._preset_gas,
-            self._preset_two_beam, self._preset_black_hole, self._preset_lhc_pp,
-            self._preset_ee_annihilation, self._preset_physics_playground,
-            self._preset_virial_cluster, self._preset_minimal,
+            self._preset_rutherford,
+            self._preset_cyclotron,
+            self._preset_gas,
+            self._preset_two_beam,
+            self._preset_black_hole,
+            self._preset_lhc_pp,
+            self._preset_ee_annihilation,
+            self._preset_physics_playground,
+            self._preset_virial_cluster,
+            self._preset_minimal,
         ]
 
     def handle_input(self) -> None:
@@ -137,44 +165,43 @@ class Renderer:
                 self.window.running = False
             elif key == ti.ui.SPACE:
                 self.paused = not self.paused
-            elif key == 'r':
+            elif key == "r":
                 self._reset_sim()
-            elif key == 'c':
+            elif key == "c":
                 self._trigger_collision_demo()
-            elif key == 't':
+            elif key == "t":
                 self.show_trails = not self.show_trails
-            elif key == 'f':
+            elif key == "f":
                 self.show_flashes = not self.show_flashes
-            elif key == 'y':
+            elif key == "y":
                 self.show_photons = not self.show_photons
-            elif key == 'e':
+            elif key == "e":
                 out_dir = config.EXPORT_DIR
                 out_dir.mkdir(parents=True, exist_ok=True)
                 sim.export_state(str(out_dir / f"state_{int(time.time())}.h5"))
-            elif key == 'g':
+            elif key == "g":
                 self.gun_enabled = not self.gun_enabled
             elif key == ti.ui.TAB:
                 n = sim.cached_stats.get("particles", 1)
                 self.selected_particle = (self.selected_particle + 1) % max(n, 1)
-            elif key == 'p':
+            elif key == "p":
                 idx = self.selected_particle
                 if idx < sim.num_active[None]:
                     current = sim.frozen[idx]
                     sim.frozen[idx] = 0 if current else 1
-            elif key == 'b':
+            elif key == "b":
                 self.bh_enabled = not self.bh_enabled
                 self._bh_ring_dirty = True
-            elif (key in '1234567890' or
-                  (isinstance(key, int) and 48 <= key <= 57)):
+            elif key in "1234567890" or (isinstance(key, int) and 48 <= key <= 57):
                 k = chr(key) if isinstance(key, int) else key
-                idx = ord(k) - ord('1') if k != '0' else 9
+                idx = ord(k) - ord("1") if k != "0" else 9
                 if 0 <= idx <= 9:
                     self._preset_idx = idx
                     self._presets()[idx]()
 
         # Fallback: number keys via is_pressed (works when get_event misses them)
         for i in range(1, 11):
-            k = str(i) if i < 10 else '0'
+            k = str(i) if i < 10 else "0"
             if self.window.is_pressed(k):
                 if not self._preset_keys_prev[i]:
                     self._preset_idx = i - 1
@@ -193,7 +220,7 @@ class Renderer:
             dx = self.gun_dx + (random.random() - 0.5) * self.gun_spread
             dy = self.gun_dy + (random.random() - 0.5) * self.gun_spread
             dz = self.gun_dz + (random.random() - 0.5) * self.gun_spread
-            mag = (dx*dx + dy*dy + dz*dz) ** 0.5
+            mag = (dx * dx + dy * dy + dz * dz) ** 0.5
             if mag > 0:
                 dx /= mag
                 dy /= mag
@@ -284,8 +311,20 @@ class Renderer:
         bh_rs = 2.0 * self.bh_mass / (self.c_light * self.c_light)
         r_isco = 3.0 * bh_rs
         r_orbit = r_isco * 1.5
-        orbit_types = [PROTON, ELECTRON, PI_PLUS, PI_MINUS, K_PLUS, MUON_MINUS,
-                        NEUTRON, POSITRON, K_MINUS, MUON_PLUS, PHOTON, PI_ZERO]
+        orbit_types = [
+            PROTON,
+            ELECTRON,
+            PI_PLUS,
+            PI_MINUS,
+            K_PLUS,
+            MUON_MINUS,
+            NEUTRON,
+            POSITRON,
+            K_MINUS,
+            MUON_PLUS,
+            PHOTON,
+            PI_ZERO,
+        ]
         for i in range(12):
             angle = i * math.pi * 2.0 / 12
             px = r_orbit * math.cos(angle)
@@ -366,8 +405,7 @@ class Renderer:
             vx = -2.0 * math.sin(angle) + 0.5
             vz = 2.0 * math.cos(angle)
             vy = 3.0 + (i % 3) * 1.5
-            sim.add_particle((px, -2.0, pz), (vx, vy, vz),
-                            [PROTON, ELECTRON, PI_PLUS][i % 3])
+            sim.add_particle((px, -2.0, pz), (vx, vy, vz), [PROTON, ELECTRON, PI_PLUS][i % 3])
 
     def _preset_virial_cluster(self):
         """N-body virial cluster: ~80 particles in a gravitationally bound sphere.
@@ -393,7 +431,7 @@ class Renderer:
                 x = (random.random() * 2 - 1) * radius
                 y = (random.random() * 2 - 1) * radius
                 z = (random.random() * 2 - 1) * radius
-                if x*x + y*y + z*z <= radius * radius:
+                if x * x + y * y + z * z <= radius * radius:
                     break
             # Random velocity direction, magnitude from virial
             theta = random.random() * 2 * math.pi
@@ -425,7 +463,7 @@ class Renderer:
         # Layout: x,y,width,height all 0-1 relative to full window (Taichi sub_window API)
         # Left column: x=0 (flush left). Right column: x=1-W, width W (flush right)
         LW, RW = 0.20, 0.18  # left/right panel widths
-        RX = 1.0 - RW        # right column x = flush right
+        RX = 1.0 - RW  # right column x = flush right
 
         with self.gui.sub_window("Physics", 0.0, 0.0, LW, 0.58) as w:
             self.dt = w.slider_float("Timestep", self.dt, 0.00001, 0.02)
@@ -476,17 +514,19 @@ class Renderer:
             r_isco = 3.0 * bh_rs
             w.text(f"r_s={bh_rs:.3f}  ISCO={r_isco:.3f}")
             w.text(f"Captures: {st.get('bh_captures', 0)}")
-            if (self.bh_enabled != old_bh or self.bh_mass != old_mass
-                    or self.bh_x != old_x or self.bh_y != old_y
-                    or self.bh_z != old_z):
+            if (
+                self.bh_enabled != old_bh
+                or self.bh_mass != old_mass
+                or self.bh_x != old_x
+                or self.bh_y != old_y
+                or self.bh_z != old_z
+            ):
                 self._bh_ring_dirty = True
                 self._disk_initialized = False
 
         with self.gui.sub_window("Spawn", 0.0, 0.90, 0.20, 0.095) as w:
             spawn_idx = (
-                self._spawn_ids.index(self.spawn_type)
-                if self.spawn_type in self._spawn_ids
-                else 0
+                self._spawn_ids.index(self.spawn_type) if self.spawn_type in self._spawn_ids else 0
             )
             spawn_idx = w.slider_int("Type", spawn_idx, 0, len(self._spawn_ids) - 1)
             self.spawn_type = self._spawn_ids[spawn_idx]
@@ -519,8 +559,8 @@ class Renderer:
             w.text(f"Annihilations: {st.get('annihilations',0)}")
             w.text(f"Pair creations: {st.get('pair_creations',0)}")
             w.text(f"Detector hits: {st.get('detector_hits',0)}")
-            det_e = st.get('detector_energy', 0)
-            det_h = max(st.get('detector_hits', 0), 1)
+            det_e = st.get("detector_energy", 0)
+            det_h = max(st.get("detector_hits", 0), 1)
             w.text(f"Det avg E: {det_e/det_h:.2f}")
             w.text(f"KE: {st.get('ke',0):.2f}")
             w.text(f"|P|: {st.get('mom',0):.3f}")
@@ -534,11 +574,11 @@ class Renderer:
 
         with self.gui.sub_window("Inspector", RX, 0.62, RW, 0.20) as w:
             w.text(f"Sel #{self.selected_particle} (TAB cycle, P pin)")
-            sel_t = int(st.get('sel_type', 0))
+            sel_t = int(st.get("sel_type", 0))
             has_particles = st.get("particles", 0) > 0
             in_range = 0 <= sel_t < NUM_TYPES
             tn = self.type_names[sel_t] if in_range and has_particles else "---"
-            frz = "FROZEN" if st.get('sel_frozen', 0) else ""
+            frz = "FROZEN" if st.get("sel_frozen", 0) else ""
             w.text(f"Type: {tn}  {frz}")
             w.text(f"m={st.get('sel_mass',0):.4f}  q={st.get('sel_charge',0):.0f}")
             px_val = st.get("sel_px", 0)
@@ -547,7 +587,7 @@ class Renderer:
             w.text(f"pos: ({px_val:.1f},{py_val:.1f},{pz_val:.1f})")
             w.text(f"spd: {st.get('sel_speed',0):.2f}  KE: {st.get('sel_ke',0):.3f}")
             pdg_info = PDG_PARTICLES.get(sel_t)
-            if pdg_info and st.get('particles', 0) > 0:
+            if pdg_info and st.get("particles", 0) > 0:
                 sp = pdg_info["spin"]
                 bn = pdg_info["baryon_num"]
                 ln = pdg_info["lepton_num"]
@@ -562,17 +602,25 @@ class Renderer:
             gun_int = w.slider_int("Gun", 1 if self.gun_enabled else 0, 0, 1)
             self.gun_enabled = gun_int == 1
             gun_idx = (
-                self._spawn_ids.index(self.gun_type)
-                if self.gun_type in self._spawn_ids
-                else 0
+                self._spawn_ids.index(self.gun_type) if self.gun_type in self._spawn_ids else 0
             )
             gun_idx = w.slider_int("G.Type", gun_idx, 0, len(self._spawn_ids) - 1)
             self.gun_type = self._spawn_ids[gun_idx]
             self.gun_speed = w.slider_float("G.Spd", self.gun_speed, 1.0, 20.0)
             self.gun_rate = w.slider_float("G.Rate", self.gun_rate, 1.0, 60.0)
             w.text("Presets (keys 1-9,0):")
-            preset_names = ["1 Ruth", "2 Cycl", "3 Gas", "4 Beam", "5 BH",
-                           "6 LHC", "7 e+e-", "8 Play", "9 N-body", "0 Min"]
+            preset_names = [
+                "1 Ruth",
+                "2 Cycl",
+                "3 Gas",
+                "4 Beam",
+                "5 BH",
+                "6 LHC",
+                "7 e+e-",
+                "8 Play",
+                "9 N-body",
+                "0 Min",
+            ]
             for i, name in enumerate(preset_names):
                 if w.button(name):
                     self._preset_idx = i
@@ -594,8 +642,11 @@ class Renderer:
             self.fps = self.fps * 0.9 + (1.0 / dt) * 0.1
 
         self.camera.track_user_inputs(
-            self.window, movement_speed=0.08,
-            yaw_speed=2.0, pitch_speed=2.0, hold_key=ti.ui.RMB,
+            self.window,
+            movement_speed=0.08,
+            yaw_speed=2.0,
+            pitch_speed=2.0,
+            hold_key=ti.ui.RMB,
         )
         self.canvas.set_background_color(BACKGROUND_COLOR)
         self.scene.set_camera(self.camera)
@@ -605,20 +656,29 @@ class Renderer:
 
         bh_rs = 2.0 * self.bh_mass / (self.c_light * self.c_light) if self.bh_enabled else 0.0
         bh_pos_tup = (self.bh_x, self.bh_y, self.bh_z)
-        sim.prepare_render(self.particle_size, PARTICLE_RADIUS_SCALE,
-                           self.bh_enabled, bh_rs, bh_pos_tup,
-                           hide_photons=not self.show_photons)
+        sim.prepare_render(
+            self.particle_size,
+            PARTICLE_RADIUS_SCALE,
+            self.bh_enabled,
+            bh_rs,
+            bh_pos_tup,
+            hide_photons=not self.show_photons,
+        )
 
         self.scene.particles(
-            sim.star_pos, radius=0.06,
-            per_vertex_color=sim.star_color, index_count=sim.NUM_BG_STARS,
+            sim.star_pos,
+            radius=0.06,
+            per_vertex_color=sim.star_color,
+            index_count=sim.NUM_BG_STARS,
         )
 
         rc = sim.render_count[None]
         if rc > 0:
             self.scene.particles(
-                sim.render_pos, radius=self.particle_size,
-                per_vertex_color=sim.render_color, index_count=rc,
+                sim.render_pos,
+                radius=self.particle_size,
+                per_vertex_color=sim.render_color,
+                index_count=rc,
             )
 
         if self.bh_enabled:
@@ -626,29 +686,35 @@ class Renderer:
                 sim.build_bh_ring(self.bh_x, self.bh_y, self.bh_z, bh_rs)
                 self._bh_ring_dirty = False
             if not self._disk_initialized:
-                sim.init_accretion_disk(
-                    self.bh_x, self.bh_y, self.bh_z, self.bh_gm, bh_rs)
+                sim.init_accretion_disk(self.bh_x, self.bh_y, self.bh_z, self.bh_gm, bh_rs)
                 self._disk_initialized = True
 
             r_shadow = sim.BH_SHADOW_FACTOR * bh_rs
             self.scene.particles(
-                sim.bh_eh_pos, radius=max(r_shadow, 0.08),
-                per_vertex_color=sim.bh_eh_color, index_count=1,
+                sim.bh_eh_pos,
+                radius=max(r_shadow, 0.08),
+                per_vertex_color=sim.bh_eh_color,
+                index_count=1,
             )
             self.scene.particles(
-                sim.bh_ring_pos, radius=bh_rs * 0.15 + 0.015,
-                per_vertex_color=sim.bh_ring_color, index_count=sim.BH_RING_N,
+                sim.bh_ring_pos,
+                radius=bh_rs * 0.15 + 0.015,
+                per_vertex_color=sim.bh_ring_color,
+                index_count=sim.BH_RING_N,
             )
             self.scene.particles(
-                sim.disk_pos, radius=bh_rs * 0.18 + 0.02,
-                per_vertex_color=sim.disk_color, index_count=sim.DISK_N,
+                sim.disk_pos,
+                radius=bh_rs * 0.18 + 0.02,
+                per_vertex_color=sim.disk_color,
+                index_count=sim.DISK_N,
             )
 
         if self.show_flashes:
             frc = sim.flash_render_count[None]
             if frc > 0:
                 self.scene.particles(
-                    sim.flash_render_pos, radius=self.particle_size * 3.0,
+                    sim.flash_render_pos,
+                    radius=self.particle_size * 3.0,
                     per_vertex_color=sim.flash_render_color,
                     index_count=min(frc, sim.MAX_FLASHES),
                 )
@@ -659,8 +725,9 @@ class Renderer:
                 nv = min(tc * 2, MAX_PARTICLES * TRAIL_LENGTH * 2)
                 self.scene.lines(
                     sim.trail_vertices,
-                width=self.trail_width,
-                    per_vertex_color=sim.trail_colors, vertex_count=nv,
+                    width=self.trail_width,
+                    per_vertex_color=sim.trail_colors,
+                    vertex_count=nv,
                 )
 
         self.canvas.scene(self.scene)

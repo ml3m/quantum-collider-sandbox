@@ -69,6 +69,11 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+ignore = [
+    "E402",  # module level import not at top (ti.init must run first in __main__)
+    "N803",  # argument lowercase (physics: E_star, M, etc.)
+    "N806",  # variable lowercase (physics: E_lab, V_hat, LW, RW, etc.)
+]
 
 [tool.black]
 line-length = 100

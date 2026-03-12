@@ -32,23 +32,23 @@ def load_hdf5_events(filepath, max_particles=100, energy_scale=0.01):
     Expected dataset keys: 'px', 'py', 'pz', 'E', 'pdgId'
     Each array has shape (N,) for N particles in the event.
     """
-    with h5py.File(filepath, 'r') as f:
+    with h5py.File(filepath, "r") as f:
         available_keys = list(f.keys())
         print(f"HDF5 keys: {available_keys}")
 
-        if 'px' in f and 'py' in f and 'pz' in f:
-            px = np.array(f['px'][:max_particles], dtype=np.float32)
-            py = np.array(f['py'][:max_particles], dtype=np.float32)
-            pz = np.array(f['pz'][:max_particles], dtype=np.float32)
+        if "px" in f and "py" in f and "pz" in f:
+            px = np.array(f["px"][:max_particles], dtype=np.float32)
+            py = np.array(f["py"][:max_particles], dtype=np.float32)
+            pz = np.array(f["pz"][:max_particles], dtype=np.float32)
         else:
             print("Required momentum keys (px, py, pz) not found.")
             return 0
 
         pdg_ids = None
-        if 'pdgId' in f:
-            pdg_ids = np.array(f['pdgId'][:max_particles], dtype=np.int32)
-        elif 'pid' in f:
-            pdg_ids = np.array(f['pid'][:max_particles], dtype=np.int32)
+        if "pdgId" in f:
+            pdg_ids = np.array(f["pdgId"][:max_particles], dtype=np.int32)
+        elif "pid" in f:
+            pdg_ids = np.array(f["pid"][:max_particles], dtype=np.int32)
 
         count = 0
         for i in range(len(px)):
@@ -78,20 +78,20 @@ def load_csv_events(filepath, max_particles=100, energy_scale=0.01):
     """
     Load particle data from a CSV file with columns: px, py, pz, pdgId
     """
-    data = np.genfromtxt(filepath, delimiter=',', names=True, max_rows=max_particles)
+    data = np.genfromtxt(filepath, delimiter=",", names=True, max_rows=max_particles)
 
     count = 0
     for row in data:
-        pdg = int(row['pdgId']) if 'pdgId' in data.dtype.names else 2212
+        pdg = int(row["pdgId"]) if "pdgId" in data.dtype.names else 2212
         type_name = PDG_TO_TYPE.get(abs(pdg), "proton")
         tid = get_type_id_by_name(type_name)
         if tid < 0:
             tid = 0
 
         velocity = (
-            float(row['px']) * energy_scale,
-            float(row['py']) * energy_scale,
-            float(row['pz']) * energy_scale,
+            float(row["px"]) * energy_scale,
+            float(row["py"]) * energy_scale,
+            float(row["pz"]) * energy_scale,
         )
         sim.add_particle((0.0, 0.0, 0.0), velocity, tid)
         count += 1

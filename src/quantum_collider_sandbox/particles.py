@@ -21,15 +21,9 @@ type_strangeness = ti.field(dtype=ti.i32, shape=NUM_TYPES)
 type_antiparticle = ti.field(dtype=ti.i32, shape=NUM_TYPES)
 
 num_channels = ti.field(dtype=ti.i32, shape=NUM_TYPES)
-channel_num_products = ti.field(
-    dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS)
-)
-channel_products = ti.field(
-    dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS, MAX_DECAY_PRODUCTS)
-)
-channel_branch_cumulative = ti.field(
-    dtype=ti.f32, shape=(NUM_TYPES, MAX_CHANNELS)
-)
+channel_num_products = ti.field(dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS))
+channel_products = ti.field(dtype=ti.i32, shape=(NUM_TYPES, MAX_CHANNELS, MAX_DECAY_PRODUCTS))
+channel_branch_cumulative = ti.field(dtype=ti.f32, shape=(NUM_TYPES, MAX_CHANNELS))
 
 collision_rule_table = ti.field(dtype=ti.i32, shape=(NUM_TYPES, NUM_TYPES))
 
@@ -77,11 +71,7 @@ def load_particle_data() -> None:
 
     for tid, props in PARTICLES.items():
         anti = props["anti_id"]
-        if (
-            anti >= 0
-            and anti != tid
-            and collision_rule_table[tid, anti] == 0
-        ):
+        if anti >= 0 and anti != tid and collision_rule_table[tid, anti] == 0:
             if props["baryon_num"] != 0:
                 collision_rule_table[tid, anti] = 2
                 collision_rule_table[anti, tid] = 2

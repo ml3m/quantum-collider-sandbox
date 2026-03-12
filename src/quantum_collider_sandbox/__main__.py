@@ -9,7 +9,7 @@ Usage:
     python -m quantum_collider_sandbox                        Default demo
     python -m quantum_collider_sandbox --particles 100        Start with N random
     python -m quantum_collider_sandbox --data      event.h5   Load from HDF5 file
-    python -m quantum_collider_sandbox --log-physics          Log physics to data/logs/ for validation
+    python -m quantum_collider_sandbox --log-physics   Log physics to data/logs/
 
 Controls:
     SPACE       Pause / Resume
@@ -42,6 +42,7 @@ import json
 import os
 import random
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import taichi as ti
@@ -142,88 +143,87 @@ def main() -> None:
     frame = 0
     last_frame_time = time.time()
 
-    log_file = None
     if args.log_physics:
         log_dir = config.EXPORT_DIR.parent / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_path = log_dir / f"physics_{int(time.time())}.jsonl"
-        log_file = open(log_path, "w", encoding="utf-8")
+        log_ctx = open(log_path, "w", encoding="utf-8")
         print(f"Physics logging to {log_path}")
+    else:
+        log_ctx = nullcontext()
 
-    while renderer.running:
-        now = time.time()
-        real_dt = now - last_frame_time
-        last_frame_time = now
+    with log_ctx as log_file:
+        while renderer.running:
+            now = time.time()
+            real_dt = now - last_frame_time
+            last_frame_time = now
 
-        renderer.handle_input()
+            renderer.handle_input()
 
-        if not renderer.paused:
-            scaled_dt = renderer.dt * renderer.time_scale
-            sub_dt = scaled_dt / renderer.substeps
-            for _ in range(renderer.substeps):
-                step(
-                    sub_dt,
-                    renderer.coulomb_k,
-                    renderer.gravity_g,
-                    renderer.mag_field,
-                    renderer.e_field,
-                    renderer.strong_k,
-                    renderer.strong_range,
-                    renderer.use_relativity,
-                    renderer.c_light,
-                    renderer.synchro,
-                    renderer.boundary_mode,
-                    renderer.boundary_size,
-                    renderer.pair_threshold,
-                    bh_on=renderer.bh_enabled,
-                    bh_gm=renderer.bh_gm,
-                    bh_rs=renderer.bh_rs,
-                    bh_pos=renderer.bh_pos,
-                )
-            do_maintenance(scaled_dt)
-            renderer.fire_gun(real_dt)
-            if renderer.bh_enabled:
-                update_accretion_disk(
-                    scaled_dt,
-                    renderer.bh_gm,
-                    renderer.bh_rs,
-                    renderer.bh_x,
-                    renderer.bh_y,
-                    renderer.bh_z,
-                )
+            if not renderer.paused:
+                scaled_dt = renderer.dt * renderer.time_scale
+                sub_dt = scaled_dt / renderer.substeps
+                for _ in range(renderer.substeps):
+                    step(
+                        sub_dt,
+                        renderer.coulomb_k,
+                        renderer.gravity_g,
+                        renderer.mag_field,
+                        renderer.e_field,
+                        renderer.strong_k,
+                        renderer.strong_range,
+                        renderer.use_relativity,
+                        renderer.c_light,
+                        renderer.synchro,
+                        renderer.boundary_mode,
+                        renderer.boundary_size,
+                        renderer.pair_threshold,
+                        bh_on=renderer.bh_enabled,
+                        bh_gm=renderer.bh_gm,
+                        bh_rs=renderer.bh_rs,
+                        bh_pos=renderer.bh_pos,
+                    )
+                do_maintenance(scaled_dt)
+                renderer.fire_gun(real_dt)
+                if renderer.bh_enabled:
+                    update_accretion_disk(
+                        scaled_dt,
+                        renderer.bh_gm,
+                        renderer.bh_rs,
+                        renderer.bh_x,
+                        renderer.bh_y,
+                        renderer.bh_z,
+                    )
 
-        if frame % 10 == 0:
-            refresh_stats(renderer.selected_particle)
-            if log_file:
-                sub_dt = (
-                    renderer.dt * renderer.time_scale / renderer.substeps
-                )
-                sim_time = step_counter[None] * sub_dt
-                entry = {
-                    "step": cached_stats.get("step", 0),
-                    "sim_time": sim_time,
-                    "ke": cached_stats.get("ke", 0),
-                    "mom": cached_stats.get("mom", 0),
-                    "mom_x": cached_stats.get("mom_x", 0),
-                    "mom_y": cached_stats.get("mom_y", 0),
-                    "mom_z": cached_stats.get("mom_z", 0),
-                    "particles": cached_stats.get("particles", 0),
-                    "collisions": cached_stats.get("collisions", 0),
-                    "decays": cached_stats.get("decays", 0),
-                    "annihilations": cached_stats.get("annihilations", 0),
-                    "gravity_g": renderer.gravity_g,
-                    "coulomb_k": renderer.coulomb_k,
-                    "use_relativity": renderer.use_relativity,
-                    "fps": renderer.fps,
-                }
-                log_file.write(json.dumps(entry) + "\n")
-                log_file.flush()
-        frame += 1
+            if frame % 10 == 0:
+                refresh_stats(renderer.selected_particle)
+                if log_file is not None:
+                    sub_dt = (
+                        renderer.dt * renderer.time_scale / renderer.substeps
+                    )
+                    sim_time = step_counter[None] * sub_dt
+                    entry = {
+                        "step": cached_stats.get("step", 0),
+                        "sim_time": sim_time,
+                        "ke": cached_stats.get("ke", 0),
+                        "mom": cached_stats.get("mom", 0),
+                        "mom_x": cached_stats.get("mom_x", 0),
+                        "mom_y": cached_stats.get("mom_y", 0),
+                        "mom_z": cached_stats.get("mom_z", 0),
+                        "particles": cached_stats.get("particles", 0),
+                        "collisions": cached_stats.get("collisions", 0),
+                        "decays": cached_stats.get("decays", 0),
+                        "annihilations": cached_stats.get("annihilations", 0),
+                        "gravity_g": renderer.gravity_g,
+                        "coulomb_k": renderer.coulomb_k,
+                        "use_relativity": renderer.use_relativity,
+                        "fps": renderer.fps,
+                    }
+                    log_file.write(json.dumps(entry) + "\n")
+                    log_file.flush()
+            frame += 1
 
-        renderer.render()
-
-    if log_file:
-        log_file.close()
+            renderer.render()
 
 
 if __name__ == "__main__":

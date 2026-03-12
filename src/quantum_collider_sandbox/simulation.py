@@ -13,7 +13,6 @@ from .config import (
     MIN_VELOCITY,
     NUM_TYPES,
     SOFTENING,
-    SPAWN_VELOCITY_SPREAD,
     TRAIL_LENGTH,
 )
 from .pdg_table import PHOTON
@@ -466,7 +465,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
             if dist < min_dist:
                 t1 = ptype[i]
                 t2 = ptype[j]
-                if t1 == PHOTON or t2 == PHOTON:
+                if t1 == PHOTON or t2 == PHOTON:  # pylint: disable=consider-using-in
                     continue
                 # Use safe normal when dist nearly zero (avoids div-by-tiny, stuck overlap)
                 overlap = min_dist - dist if dist > 1e-8 else min_dist
@@ -893,7 +892,8 @@ def _apply_spawn_queue():
             charge[idx] = type_charge[pt]
             radius[idx] = type_radius[pt]
             alive[idx] = 1
-            frozen[idx] = 0  # Spawn products are never frozen; only add_particle(is_frozen=True) sets frozen
+            # Spawn products are never frozen; only add_particle(is_frozen=True) sets frozen
+            frozen[idx] = 0
             trail_head[idx] = 0
             trail_count[idx] = 0
 

@@ -1,7 +1,14 @@
 """Simulation and window configuration constants."""
 
+from pathlib import Path
+
+# Directory for exported HDF5 state files
+# Uses project root (parent of src/) when possible, else cwd/data/exports
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+EXPORT_DIR = _PROJECT_ROOT / "data" / "exports"
+
 MAX_PARTICLES = 2000
-TRAIL_LENGTH = 80
+TRAIL_LENGTH = 100
 
 DT = 0.002
 SUBSTEPS = 3
@@ -29,18 +36,20 @@ PAIR_CREATION_THRESHOLD = 15.0
 BOUNDARY_MODE = "reflect"
 BOUNDARY_SIZE = 12.0
 
+# ── Visualization ────────────────────────────────────────────────────────
 WINDOW_WIDTH = 1600
 WINDOW_HEIGHT = 900
 WINDOW_TITLE = "Quantum Collider Sandbox"
 
 CAMERA_POS = (0.0, 2.0, 22.0)
 CAMERA_LOOKAT = (0.0, 0.0, 0.0)
-CAMERA_FOV = 50
+CAMERA_FOV = 55
 
 BACKGROUND_COLOR = (0.01, 0.01, 0.03)
 
-BASE_PARTICLE_RADIUS = 0.08
-PARTICLE_RADIUS_SCALE = 0.35
+BASE_PARTICLE_RADIUS = 0.12
+PARTICLE_RADIUS_SCALE = 0.45
+TRAIL_WIDTH = 2.0
 
 NUM_TYPES = 48
 

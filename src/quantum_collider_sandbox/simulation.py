@@ -15,6 +15,7 @@ from .config import (
     SPAWN_VELOCITY_SPREAD,
     TRAIL_LENGTH,
 )
+from .pdg_table import PHOTON
 from .particles import (
     channel_branch_cumulative,
     channel_num_products,
@@ -426,10 +427,12 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
             dist = diff.norm()
             min_dist = (radius[i] + radius[j]) * 1.5
             if dist < min_dist and dist > 1e-8:
-                normal = diff / dist
-                overlap = min_dist - dist
                 t1 = ptype[i]
                 t2 = ptype[j]
+                if t1 == PHOTON or t2 == PHOTON:
+                    continue
+                normal = diff / dist
+                overlap = min_dist - dist
                 rule = collision_rule_table[t1, t2]
 
                 if rule == 1:

@@ -9,6 +9,7 @@ import taichi as ti
 from . import config
 from .config import (
     BACKGROUND_COLOR,
+    TRAIL_WIDTH,
     WINDOW_WIDTH, WINDOW_HEIGHT, WINDOW_TITLE,
     CAMERA_POS, CAMERA_LOOKAT, CAMERA_FOV,
     BASE_PARTICLE_RADIUS, PARTICLE_RADIUS_SCALE,
@@ -77,7 +78,7 @@ class Renderer:
             self.boundary_mode_idx = 2
         self.boundary_size = BOUNDARY_SIZE
         self.particle_size = BASE_PARTICLE_RADIUS
-        self.trail_width = 1.5
+        self.trail_width = TRAIL_WIDTH
 
         self.spawn_type = PROTON
         self.spawn_mass_mult = 1.0
@@ -133,7 +134,9 @@ class Renderer:
             elif key == 'f':
                 self.show_flashes = not self.show_flashes
             elif key == 'e':
-                sim.export_state(f"state_{int(time.time())}.h5")
+                out_dir = config.EXPORT_DIR
+                out_dir.mkdir(parents=True, exist_ok=True)
+                sim.export_state(str(out_dir / f"state_{int(time.time())}.h5"))
             elif key == 'g':
                 self.gun_enabled = not self.gun_enabled
             elif key == ti.ui.TAB:

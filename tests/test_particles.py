@@ -1,8 +1,4 @@
-"""Tests for particles module. Requires Taichi CPU init for imports."""
-
-import taichi as ti
-
-ti.init(arch=ti.cpu)
+"""Tests for particles module. Requires Taichi CPU init (see conftest.py)."""
 
 from quantum_collider_sandbox.particles import (
     get_type_id_by_name,

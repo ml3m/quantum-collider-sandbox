@@ -1,13 +1,10 @@
-"""Tests for data_loader module. Requires Taichi CPU init for simulation."""
+"""Tests for data_loader module. Requires Taichi CPU init (see conftest.py)."""
 
 import tempfile
 from pathlib import Path
 
 import h5py
 import numpy as np
-import taichi as ti
-
-ti.init(arch=ti.cpu)
 
 from quantum_collider_sandbox import data_loader
 from quantum_collider_sandbox.particles import get_type_id_by_name, load_particle_data

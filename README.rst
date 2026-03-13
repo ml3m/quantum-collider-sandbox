@@ -79,17 +79,20 @@ Installation
 Makefile Targets
 --------------------------------------------------------------------------------
 
-+----------+----------------------------------------------------------+
-| Target   | Description                                              |
-+==========+==========================================================+
-| run      | Start the particle physics simulation                    |
-+----------+----------------------------------------------------------+
-| install  | Install package in editable mode with dev dependencies   |
-+----------+----------------------------------------------------------+
-| lint     | Run pylint on the source code                             |
-+----------+----------------------------------------------------------+
-| test     | Run pytest test suite                                    |
-+----------+----------------------------------------------------------+
+.. list-table::
+   :header-rows: 1
+   :widths: 10 50
+
+   * - Target
+     - Description
+   * - run
+     - Start the particle physics simulation
+   * - install
+     - Install package in editable mode with dev dependencies
+   * - lint
+     - Run pylint on the source code
+   * - test
+     - Run pytest test suite
 
 --------------------------------------------------------------------------------
 Command-Line Usage
@@ -106,39 +109,42 @@ Command-Line Usage
 Keyboard Controls
 --------------------------------------------------------------------------------
 
-+--------+------------------------------------------+
-| Key    | Action                                  |
-+========+==========================================+
-| SPACE  | Pause / Resume                           |
-+--------+------------------------------------------+
-| R      | Reset to demo state                      |
-+--------+------------------------------------------+
-| C      | Spawn proton–antiproton collision        |
-+--------+------------------------------------------+
-| T      | Toggle trails                            |
-+--------+------------------------------------------+
-| F      | Toggle collision flashes                 |
-+--------+------------------------------------------+
-| Y      | Toggle photon visibility                 |
-+--------+------------------------------------------+
-| E      | Export state and time series to HDF5      |
-+--------+------------------------------------------+
-| B      | Toggle black hole                        |
-+--------+------------------------------------------+
-| G      | Toggle particle gun                      |
-+--------+------------------------------------------+
-| TAB    | Cycle inspector to next particle         |
-+--------+------------------------------------------+
-| P      | Pin / freeze selected particle           |
-+--------+------------------------------------------+
-| 1–9    | Presets (Rutherford, cyclotron, LHC, …)  |
-+--------+------------------------------------------+
-| RMB    | Orbit camera (drag)                      |
-+--------+------------------------------------------+
-| Scroll | Zoom                                    |
-+--------+------------------------------------------+
-| ESC    | Quit                                    |
-+--------+------------------------------------------+
+.. list-table::
+   :header-rows: 1
+   :widths: 8 40
+
+   * - Key
+     - Action
+   * - SPACE
+     - Pause / Resume
+   * - R
+     - Reset to demo state
+   * - C
+     - Spawn proton–antiproton collision
+   * - T
+     - Toggle trails
+   * - F
+     - Toggle collision flashes
+   * - Y
+     - Toggle photon visibility
+   * - E
+     - Export state and time series to HDF5
+   * - B
+     - Toggle black hole
+   * - G
+     - Toggle particle gun
+   * - TAB
+     - Cycle inspector to next particle
+   * - P
+     - Pin / freeze selected particle
+   * - 1–9
+     - Presets (Rutherford, cyclotron, LHC, …)
+   * - RMB
+     - Orbit camera (drag)
+   * - Scroll
+     - Zoom
+   * - ESC
+     - Quit
 
 --------------------------------------------------------------------------------
 Vulkan / GPU Troubleshooting

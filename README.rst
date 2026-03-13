@@ -6,6 +6,11 @@ Real-Time GPU Particle Physics Simulation with PDG-accurate particle catalog.
 40 observable particles, real masses, lifetimes, decay channels, and proper
 relativistic kinematics.
 
+.. image:: assets/1.png
+   :alt: Quantum Collider Sandbox screenshot
+   :width: 100%
+   :align: center
+
 --------------------------------------------------------------------------------
 Quick Start
 --------------------------------------------------------------------------------

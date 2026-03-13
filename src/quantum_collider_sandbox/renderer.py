@@ -143,8 +143,9 @@ class Renderer:
         self._preset_idx = 0
 
     def _presets(self):
-        """Return list of preset methods (0-9)."""
+        """Return list of preset methods (0-9). Key 1=Default, 2=Rutherford, ..., 0=N-body."""
         return [
+            self._preset_default,
             self._preset_rutherford,
             self._preset_cyclotron,
             self._preset_gas,
@@ -154,7 +155,6 @@ class Renderer:
             self._preset_ee_annihilation,
             self._preset_physics_playground,
             self._preset_virial_cluster,
-            self._preset_minimal,
         ]
 
     def handle_input(self) -> None:
@@ -232,6 +232,11 @@ class Renderer:
             )
 
     def _reset_sim(self):
+        """Reset to the currently selected preset."""
+        self._presets()[self._preset_idx]()
+
+    def _preset_default(self):
+        """Default demo: mixed particles (initial state on startup)."""
         sim.init_simulation()
         self._setup_demo()
 
@@ -462,10 +467,10 @@ class Renderer:
 
         # Layout: x,y,width,height all 0-1 relative to full window (Taichi sub_window API)
         # Left column: x=0 (flush left). Right column: x=1-W, width W (flush right)
-        LW, RW = 0.20, 0.18  # left/right panel widths
-        RX = 1.0 - RW  # right column x = flush right
+        left_panel_width, right_panel_width = 0.20, 0.18  # left/right panel widths
+        right_column_x = 1.0 - right_panel_width  # right column x = flush right
 
-        with self.gui.sub_window("Physics", 0.0, 0.0, LW, 0.58) as w:
+        with self.gui.sub_window("Physics", 0.0, 0.0, left_panel_width, 0.58) as w:
             self.dt = w.slider_float("Timestep", self.dt, 0.00001, 0.02)
             self.substeps = w.slider_int("Substeps", self.substeps, 1, 10)
             self.time_scale = w.slider_float("Time x", self.time_scale, 0.01, 10.0)
@@ -491,7 +496,7 @@ class Renderer:
             config.INTEGRATOR = "leapfrog" if integrator_idx == 1 else "euler"
             w.text("  0=Euler 1=Leapfrog")
 
-        with self.gui.sub_window("Boundary", 0.0, 0.59, LW, 0.14) as w:
+        with self.gui.sub_window("Boundary", 0.0, 0.59, left_panel_width, 0.14) as w:
             self.boundary_mode_idx = w.slider_int("Mode", self.boundary_mode_idx, 0, 2)
             w.text(f"  [{bmode}]")
             self.boundary_size = w.slider_float("Size", self.boundary_size, 3.0, 30.0)
@@ -501,7 +506,7 @@ class Renderer:
                 self.show_photons = not self.show_photons
             w.text("  (Y key)")
 
-        with self.gui.sub_window("Black Hole", 0.0, 0.72, LW, 0.17) as w:
+        with self.gui.sub_window("Black Hole", 0.0, 0.72, left_panel_width, 0.17) as w:
             bh_int = w.slider_int("BH On", 1 if self.bh_enabled else 0, 0, 1)
             old_bh = self.bh_enabled
             self.bh_enabled = bh_int == 1
@@ -549,7 +554,7 @@ class Renderer:
             if w.button("Collision"):
                 self._trigger_collision_demo()
 
-        with self.gui.sub_window("Stats", RX, 0.0, RW, 0.38) as w:
+        with self.gui.sub_window("Stats", right_column_x, 0.0, right_panel_width, 0.38) as w:
             status = "PAUSED" if self.paused else "RUNNING"
             gun_str = "  GUN ON" if self.gun_enabled else ""
             w.text(f"{status}  FPS:{self.fps:.0f}{gun_str}")
@@ -566,13 +571,13 @@ class Renderer:
             w.text(f"|P|: {st.get('mom',0):.3f}")
             w.text(f"Avg speed: {st.get('avg_speed',0):.2f}")
 
-        with self.gui.sub_window("Census", RX, 0.39, RW, 0.22) as w:
+        with self.gui.sub_window("Census", right_column_x, 0.39, right_panel_width, 0.22) as w:
             for i in range(NUM_TYPES):
                 cnt = st.get(f"type_{i}", 0)
                 if cnt > 0:
                     w.text(f"{self.type_names[i]}: {cnt}")
 
-        with self.gui.sub_window("Inspector", RX, 0.62, RW, 0.20) as w:
+        with self.gui.sub_window("Inspector", right_column_x, 0.62, right_panel_width, 0.20) as w:
             w.text(f"Sel #{self.selected_particle} (TAB cycle, P pin)")
             sel_t = int(st.get("sel_type", 0))
             has_particles = st.get("particles", 0) > 0
@@ -598,7 +603,9 @@ class Renderer:
                 lt_str = "stable" if lt > 1e20 else f"{lt:.2e}s"
                 w.text(f"{mass_mev:.2f} MeV  {lt_str}")
 
-        with self.gui.sub_window("Gun/Presets", RX, 0.83, RW, 0.165) as w:
+        with self.gui.sub_window(
+            "Gun/Presets", right_column_x, 0.83, right_panel_width, 0.165
+        ) as w:
             gun_int = w.slider_int("Gun", 1 if self.gun_enabled else 0, 0, 1)
             self.gun_enabled = gun_int == 1
             gun_idx = (
@@ -610,16 +617,16 @@ class Renderer:
             self.gun_rate = w.slider_float("G.Rate", self.gun_rate, 1.0, 60.0)
             w.text("Presets (keys 1-9,0):")
             preset_names = [
-                "1 Ruth",
-                "2 Cycl",
-                "3 Gas",
-                "4 Beam",
-                "5 BH",
-                "6 LHC",
-                "7 e+e-",
-                "8 Play",
-                "9 N-body",
-                "0 Min",
+                "1 Def",
+                "2 Ruth",
+                "3 Cycl",
+                "4 Gas",
+                "5 Beam",
+                "6 BH",
+                "7 LHC",
+                "8 e+e-",
+                "9 Play",
+                "0 N-body",
             ]
             for i, name in enumerate(preset_names):
                 if w.button(name):

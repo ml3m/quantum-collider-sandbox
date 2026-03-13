@@ -1,3 +1,4 @@
+# pylint: disable=C0302 disable=C0103
 """Taichi-based GPU physics simulation: forces, collisions, decays, black hole."""
 
 import h5py
@@ -8,6 +9,7 @@ from . import config as _config
 from .config import (
     COLLISION_RESTITUTION,
     CUTOFF_RADIUS,
+    FLASH_OPACITY,
     MAX_PARTICLES,
     MAX_VELOCITY,
     MIN_VELOCITY,
@@ -106,7 +108,7 @@ spawn_queue_type = ti.field(dtype=ti.i32, shape=MAX_PARTICLES)
 spawn_count = ti.field(dtype=ti.i32, shape=())
 
 flash_render_pos = ti.Vector.field(3, dtype=ti.f32, shape=MAX_FLASHES)
-flash_render_color = ti.Vector.field(3, dtype=ti.f32, shape=MAX_FLASHES)
+flash_render_color = ti.Vector.field(4, dtype=ti.f32, shape=MAX_FLASHES)  # RGBA for transparency
 flash_life = ti.field(dtype=ti.f32, shape=MAX_FLASHES)
 flash_count = ti.field(dtype=ti.i32, shape=())
 flash_render_count = ti.field(dtype=ti.i32, shape=())
@@ -182,6 +184,7 @@ def _clear_all():
     step_counter[None] = 0
     flash_count[None] = 0
     flash_render_count[None] = 0
+    trail_line_count[None] = 0
     inv_mass_head[None] = 0
     for i in range(NUM_STATS):
         stats[i] = 0.0
@@ -190,6 +193,11 @@ def _clear_all():
         frozen[i] = 0
         trail_head[i] = 0
         trail_count[i] = 0
+        for t in range(TRAIL_LENGTH):
+            trail_pos[i, t] = ti.Vector([0.0, 0.0, 0.0])
+    for i in range(MAX_PARTICLES * TRAIL_LENGTH * 2):
+        trail_vertices[i] = ti.Vector([0.0, 0.0, 0.0])
+        trail_colors[i] = ti.Vector([0.0, 0.0, 0.0])
     for i in range(INV_MASS_BUF):
         inv_mass_buffer[i] = 0.0
 
@@ -561,7 +569,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
                         flash_render_pos[fidx] = center
-                        flash_render_color[fidx] = ti.Vector([0.9, 0.9, 0.3])
+                        flash_render_color[fidx] = ti.Vector([0.9, 0.9, 0.3, FLASH_OPACITY])
                         flash_life[fidx] = 1.0
 
                 elif rule == 2:
@@ -645,7 +653,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
                         flash_render_pos[fidx] = center
-                        flash_render_color[fidx] = ti.Vector([0.3, 0.8, 0.8])
+                        flash_render_color[fidx] = ti.Vector([0.3, 0.8, 0.8, FLASH_OPACITY])
                         flash_life[fidx] = 1.2
 
                 elif rule == 3:
@@ -711,7 +719,7 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
                         flash_render_pos[fidx] = center
-                        flash_render_color[fidx] = ti.Vector([0.3, 0.8, 0.8])
+                        flash_render_color[fidx] = ti.Vector([0.3, 0.8, 0.8, FLASH_OPACITY])
                         flash_life[fidx] = 1.2
 
                 else:
@@ -766,7 +774,9 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                                 fidx = ti.atomic_add(flash_count[None], 1)
                                 if fidx < MAX_FLASHES:
                                     flash_render_pos[fidx] = c
-                                    flash_render_color[fidx] = ti.Vector([0.5, 0.3, 0.7])
+                                    flash_render_color[fidx] = ti.Vector(
+                                        [0.5, 0.3, 0.7, FLASH_OPACITY]
+                                    )
                                     flash_life[fidx] = 0.8
 
                     fidx2 = ti.atomic_add(flash_count[None], 1)
@@ -774,7 +784,14 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                         flash_render_pos[fidx2] = (pos[i] + pos[j]) * 0.5
                         c1 = type_color[t1]
                         c2 = type_color[t2]
-                        flash_render_color[fidx2] = (c1 + c2) * 0.25
+                        flash_render_color[fidx2] = ti.Vector(
+                            [
+                                (c1[0] + c2[0]) * 0.25,
+                                (c1[1] + c2[1]) * 0.25,
+                                (c1[2] + c2[2]) * 0.25,
+                                FLASH_OPACITY,
+                            ]
+                        )
                         flash_life[fidx2] = 0.6
 
 
@@ -847,7 +864,14 @@ def monte_carlo_decay(
             fidx = ti.atomic_add(flash_count[None], 1)
             if fidx < MAX_FLASHES:
                 flash_render_pos[fidx] = parent_pos
-                flash_render_color[fidx] = type_color[pt] * 0.35
+                flash_render_color[fidx] = ti.Vector(
+                    [
+                        type_color[pt][0] * 0.35,
+                        type_color[pt][1] * 0.35,
+                        type_color[pt][2] * 0.35,
+                        FLASH_OPACITY,
+                    ]
+                )
                 flash_life[fidx] = 0.8
 
             pt0 = channel_products[pt, selected_channel, 0]

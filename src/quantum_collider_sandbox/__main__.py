@@ -13,7 +13,7 @@ Usage:
 
 Controls:
     SPACE       Pause / Resume
-    R           Reset to demo state
+    R           Reset to selected preset
     C           Spawn p + p-bar collision
     T           Toggle trails
     F           Toggle collision flashes
@@ -23,15 +23,16 @@ Controls:
     G           Toggle particle gun
     TAB         Cycle inspector to next particle
     P           Pin/freeze selected particle
-    1           Preset: Rutherford scattering
-    2           Preset: Cyclotron (magnetic field spirals)
-    3           Preset: Random gas with gravity
-    4           Preset: Two-beam collision
-    5           Preset: Black hole orbits
-    6           Preset: LHC pp collision
-    7           Preset: e+e- annihilation
-    8           Preset: Physics playground (gravity + E + B + relativity)
-    9           Preset: N-body virial cluster (gravitational bound sphere)
+    1           Preset: Default (mixed particles, initial state)
+    2           Preset: Rutherford scattering
+    3           Preset: Cyclotron (magnetic field spirals)
+    4           Preset: Random gas with gravity
+    5           Preset: Two-beam collision
+    6           Preset: Black hole orbits
+    7           Preset: LHC pp collision
+    8           Preset: e+e- annihilation
+    9           Preset: Physics playground (gravity + E + B + relativity)
+    0           Preset: N-body virial cluster (gravitational bound sphere)
     RMB+drag    Orbit camera
     Scroll      Zoom
     ESC         Quit

@@ -82,6 +82,7 @@ PARTICLES = {
         "mass_mev": 0.51099895,
         "charge_e": -1,
         "spin": 0.5,
+        # checked
         "lifetime_s": INF,
         "baryon_num": 0,
         "lepton_num": 1,

@@ -129,7 +129,7 @@ Keyboard Controls
    * - SPACE
      - Pause / Resume
    * - R
-     - Reset to demo state
+     - Reset to selected preset (or default if none selected)
    * - C
      - Spawn proton–antiproton collision
    * - T
@@ -148,8 +148,8 @@ Keyboard Controls
      - Cycle inspector to next particle
    * - P
      - Pin / freeze selected particle
-   * - 1–9
-     - Presets (Rutherford, cyclotron, LHC, …)
+   * - 1–9, 0
+     - Presets (1=Default, 2=Rutherford, 3=Cyclotron, …, 0=N-body)
    * - RMB
      - Orbit camera (drag)
    * - Scroll

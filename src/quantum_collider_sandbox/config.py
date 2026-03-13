@@ -54,6 +54,9 @@ BASE_PARTICLE_RADIUS = 0.12
 PARTICLE_RADIUS_SCALE = 0.45
 TRAIL_WIDTH = 2.0
 
+# Collision flash alpha (0–1). Lower = more transparent, particles visible through flashes.
+FLASH_OPACITY = 0.1
+
 NUM_TYPES = 48
 
 BH_MASS = 200.0

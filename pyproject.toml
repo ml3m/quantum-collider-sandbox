@@ -11,12 +11,6 @@ requires-python = ">=3.10,<3.13"
 license = {text = "MIT"}
 authors = [{name = "Quantum Collider Sandbox"}]
 keywords = ["physics", "simulation", "particles", "taichi", "gpu"]
-
-[project.urls]
-Homepage = "https://github.com/ml3m/quantum-collider-sandbox"
-Repository = "https://github.com/ml3m/quantum-collider-sandbox"
-Documentation = "https://github.com/ml3m/quantum-collider-sandbox#readme"
-
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -33,6 +27,11 @@ dependencies = [
     "taichi>=1.7.0",
     "h5py>=3.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ml3m/quantum-collider-sandbox"
+Repository = "https://github.com/ml3m/quantum-collider-sandbox"
+Documentation = "https://github.com/ml3m/quantum-collider-sandbox#readme"
 
 [project.optional-dependencies]
 dev = [

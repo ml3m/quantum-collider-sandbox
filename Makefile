@@ -1,10 +1,10 @@
-.PHONY: run lint install test test-cov format-check format
+.PHONY: run lint install test test-cov format-check format prod-ready
 
 run:
 	PYTHONPATH=src python -m quantum_collider_sandbox
 
 lint:
-	PYTHONPATH=src pylint src/quantum_collider_sandbox
+	PYTHONPATH=src pylint --fail-on=C,R,W src/quantum_collider_sandbox
 
 install:
 	pip install -e ".[dev]"
@@ -22,3 +22,5 @@ format-check:
 format:
 	ruff check --fix src/ tests/
 	black src/ tests/
+
+prod-ready: format-check lint test-cov

@@ -14,27 +14,27 @@ from quantum_collider_sandbox.simulation import init_simulation, num_active, pos
 
 def test_pdg_to_type_proton() -> None:
     """PDG 2212 should map to proton."""
-    assert data_loader._pdg_to_type_name(2212) == "proton"
+    assert data_loader.pdg_to_type_name(2212) == "proton"
 
 
 def test_pdg_to_type_antiproton() -> None:
     """PDG -2212 should map to anti-proton."""
-    assert data_loader._pdg_to_type_name(-2212) == "anti-proton"
+    assert data_loader.pdg_to_type_name(-2212) == "anti-proton"
 
 
 def test_pdg_to_type_electron() -> None:
     """PDG 11 should map to electron."""
-    assert data_loader._pdg_to_type_name(11) == "electron"
+    assert data_loader.pdg_to_type_name(11) == "electron"
 
 
 def test_pdg_to_type_photon() -> None:
     """PDG 22 should map to photon."""
-    assert data_loader._pdg_to_type_name(22) == "photon"
+    assert data_loader.pdg_to_type_name(22) == "photon"
 
 
 def test_pdg_to_type_unknown_fallback() -> None:
     """Unknown PDG should fallback to proton."""
-    assert data_loader._pdg_to_type_name(99999) == "proton"
+    assert data_loader.pdg_to_type_name(99999) == "proton"
 
 
 def test_load_hdf5_events_momentum_only() -> None:

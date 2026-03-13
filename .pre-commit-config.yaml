@@ -1,11 +1,28 @@
+# Mirrors CI checks: make format-check, make lint, make test-cov
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.0
     hooks:
       - id: ruff
-        args: [--fix]
+        args: [--fix, src/, tests/]
+        pass_filenames: false
   - repo: https://github.com/psf/black
     rev: 24.10.0
     hooks:
       - id: black
         language_version: python3
+        args: [src/, tests/]
+        pass_filenames: false
+  - repo: local
+    hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint --fail-on=C,R,W src/quantum_collider_sandbox
+        language: system
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: bash -c 'ROOT=$(git rev-parse --show-toplevel) && cd "$ROOT" && [ -x venv/bin/python ] && export PATH="$ROOT/venv/bin:$PATH"; make test-cov'
+        language: system
+        pass_filenames: false
+        always_run: true

@@ -72,7 +72,7 @@ PDG_TO_TYPE = {
 }
 
 
-def _pdg_to_type_name(pdg: int) -> str:
+def pdg_to_type_name(pdg: int) -> str:
     """Map PDG code to internal type name. Uses signed lookup for particle/antiparticle."""
     return PDG_TO_TYPE.get(pdg, PDG_TO_TYPE.get(abs(pdg), "proton"))
 
@@ -127,7 +127,7 @@ def load_hdf5_events(
             type_name = "proton"
             if pdg_ids is not None:
                 pdg = int(pdg_ids[i])
-                type_name = _pdg_to_type_name(pdg)
+                type_name = pdg_to_type_name(pdg)
 
             tid = get_type_id_by_name(type_name)
             if tid < 0:
@@ -176,7 +176,7 @@ def load_csv_events(
     count = 0
     for row in data:
         pdg = int(row["pdgId"]) if "pdgId" in dtype_names else 2212
-        type_name = _pdg_to_type_name(pdg)
+        type_name = pdg_to_type_name(pdg)
         tid = get_type_id_by_name(type_name)
         if tid < 0:
             tid = 0

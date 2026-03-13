@@ -15,7 +15,7 @@ Quick Start
 .. code-block:: bash
 
    git clone https://github.com/ml3m/quantum-collider-sandbox.git
-   cd quantum_collider_sandbox
+   cd quantum-collider-sandbox
    python -m venv .venv && source .venv/bin/activate   # Linux/macOS
    make install && make run
 
@@ -47,7 +47,7 @@ Installation
    .. code-block:: bash
 
       git clone https://github.com/ml3m/quantum-collider-sandbox.git
-      cd quantum_collider_sandbox
+      cd quantum-collider-sandbox
 
 2. **Create and activate a virtual environment** (recommended)
 
@@ -81,7 +81,7 @@ Makefile Targets
 
 .. list-table::
    :header-rows: 1
-   :widths: 10 50
+   :widths: 12 50
 
    * - Target
      - Description
@@ -93,6 +93,12 @@ Makefile Targets
      - Run pylint on the source code
    * - test
      - Run pytest test suite
+   * - test-cov
+     - Run pytest with coverage report
+   * - format-check
+     - Check code formatting (ruff + black)
+   * - format
+     - Auto-fix formatting (ruff + black)
 
 --------------------------------------------------------------------------------
 Command-Line Usage
@@ -163,9 +169,12 @@ Verify Vulkan with:
 
    vulkaninfo
 
-If Vulkan is unavailable, Taichi can fall back to other backends by editing
-``src/quantum_collider_sandbox/__main__.py`` and changing
-``ti.init(arch=ti.vulkan)`` to ``ti.init(arch=ti.cpu)`` or ``ti.init(arch=ti.gpu)``.
+If Vulkan is unavailable, use the ``QUANTUM_COLLIDER_ARCH`` environment variable::
+
+   QUANTUM_COLLIDER_ARCH=cpu python -m quantum_collider_sandbox   # CPU fallback
+   QUANTUM_COLLIDER_ARCH=gpu python -m quantum_collider_sandbox    # Auto-detect GPU
+
+Supported values: ``vulkan`` (default), ``cuda``, ``cpu``, ``gpu``.
 
 --------------------------------------------------------------------------------
 License

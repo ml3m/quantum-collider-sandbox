@@ -7,10 +7,16 @@ name = "quantum-collider-sandbox"
 version = "1.0.1"
 description = "Real-Time GPU Particle Physics Simulation with PDG-accurate particle catalog"
 readme = "README.rst"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = {text = "MIT"}
 authors = [{name = "Quantum Collider Sandbox"}]
 keywords = ["physics", "simulation", "particles", "taichi", "gpu"]
+
+[project.urls]
+Homepage = "https://github.com/ml3m/quantum-collider-sandbox"
+Repository = "https://github.com/ml3m/quantum-collider-sandbox"
+Documentation = "https://github.com/ml3m/quantum-collider-sandbox#readme"
+
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -35,6 +41,7 @@ dev = [
     "black>=23",
     "pytest>=7",
     "pytest-cov>=4",
+    "pre-commit>=3.0",
 ]
 
 [project.scripts]

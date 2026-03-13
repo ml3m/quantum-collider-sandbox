@@ -47,7 +47,9 @@ from pathlib import Path
 
 import taichi as ti
 
-ti.init(arch=ti.vulkan)
+_ARCH_MAP = {"vulkan": ti.vulkan, "cuda": ti.cuda, "cpu": ti.cpu, "gpu": ti.gpu}
+_arch_name = os.environ.get("QUANTUM_COLLIDER_ARCH", "vulkan").lower()
+ti.init(arch=_ARCH_MAP.get(_arch_name, ti.vulkan))
 
 from . import config
 from .particles import load_particle_data

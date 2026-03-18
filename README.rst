@@ -11,6 +11,8 @@ relativistic kinematics.
    :width: 100%
    :align: center
 
+**Documentation:** https://ml3m.github.io/quantum-collider-sandbox/
+
 --------------------------------------------------------------------------------
 Quick Start
 --------------------------------------------------------------------------------
@@ -104,6 +106,8 @@ Makefile Targets
      - Check code formatting (ruff + black)
    * - format
      - Auto-fix formatting (ruff + black)
+   * - docs
+     - Build Sphinx documentation (output in ``docs/build/``)
 
 --------------------------------------------------------------------------------
 Command-Line Usage

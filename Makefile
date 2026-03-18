@@ -1,4 +1,4 @@
-.PHONY: run lint install test test-cov format-check format prod-ready
+.PHONY: run lint install test test-cov format-check format prod-ready docs
 
 run:
 	PYTHONPATH=src python -m quantum_collider_sandbox
@@ -24,3 +24,7 @@ format:
 	black src/ tests/
 
 prod-ready: format-check lint test-cov
+
+docs:
+	cd docs && python -m sphinx -b html source build
+	@echo "Open docs/build/index.html to view"

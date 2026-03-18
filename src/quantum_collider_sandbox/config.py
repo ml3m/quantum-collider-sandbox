@@ -10,8 +10,8 @@ EXPORT_DIR = _PROJECT_ROOT / "data" / "exports"
 MAX_PARTICLES = 100
 TRAIL_LENGTH = 1000
 
-DT = 0.002
-SUBSTEPS = 3
+DT = 0.001  # smaller = smoother; use 0.002 for faster playback
+SUBSTEPS = 4
 COULOMB_K = 40.0
 GRAVITY_G = 6.0
 SOFTENING = 0.05

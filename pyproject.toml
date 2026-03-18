@@ -31,11 +31,12 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/ml3m/quantum-collider-sandbox"
 Repository = "https://github.com/ml3m/quantum-collider-sandbox"
-Documentation = "https://github.com/ml3m/quantum-collider-sandbox#readme"
+Documentation = "https://ml3m.github.io/quantum-collider-sandbox/"
 
 [project.optional-dependencies]
 dev = [
     "pylint>=3.0",
+    "sphinx>=7.0",
     "ruff>=0.1",
     "black>=23",
     "pytest>=7",

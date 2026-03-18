@@ -201,7 +201,11 @@ def main() -> None:
                     )
 
             if frame % 10 == 0:
-                refresh_stats(renderer.selected_particle)
+                refresh_stats(
+                    renderer.selected_particle,
+                    use_rel=renderer.use_relativity,
+                    c_light=renderer.c_light,
+                )
                 if log_file is not None:
                     sub_dt = renderer.dt * renderer.time_scale / renderer.substeps
                     sim_time = step_counter[None] * sub_dt

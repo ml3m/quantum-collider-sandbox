@@ -30,7 +30,7 @@ from .particles import (
     type_mass,
     type_radius,
 )
-from .pdg_table import PHOTON
+from .pdg_table import ELECTRON, PHOTON, PI_MINUS, PI_PLUS, PI_ZERO, POSITRON
 
 MAX_FLASHES = 256
 INV_MASS_BUF = 64
@@ -517,12 +517,56 @@ def cm_decay_5body(
     return v1, v2, v3, v4, v5
 
 
-# ── Collision detection ───────────────────────────────────────────────────
+# ── Relativistic kinematics helpers for collisions ────────────────────────
+
+
+@ti.func
+def _invariant_mass(
+    mi: ti.f32, vi: ti.template(), mj: ti.f32, vj: ti.template(), c_light: ti.f32
+) -> ti.f32:
+    """Compute relativistic invariant mass √s / c² (in sim mass units).
+    s = (E₁+E₂)² − |p₁+p₂|²c²,  where E = γmc², p = γmv."""
+    c_sq = c_light * c_light
+    spi_sq = vi.norm_sqr()
+    spj_sq = vj.norm_sqr()
+    gi = 1.0 / ti.sqrt(1.0 - ti.min(spi_sq / c_sq, 0.99))
+    gj = 1.0 / ti.sqrt(1.0 - ti.min(spj_sq / c_sq, 0.99))
+    Ei = gi * mi * c_sq
+    Ej = gj * mj * c_sq
+    pi_vec = gi * mi * vi
+    pj_vec = gj * mj * vj
+    E_total = Ei + Ej
+    p_total = pi_vec + pj_vec
+    s = E_total * E_total - p_total.norm_sqr() * c_sq
+    return ti.sqrt(ti.max(s, 0.0)) / c_sq
+
+
+@ti.func
+def _cm_velocity(
+    mi: ti.f32, vi: ti.template(), mj: ti.f32, vj: ti.template(), c_light: ti.f32
+) -> ti.template():
+    """Compute relativistic CM velocity: v_CM = (p₁+p₂)c² / (E₁+E₂)."""
+    c_sq = c_light * c_light
+    spi_sq = vi.norm_sqr()
+    spj_sq = vj.norm_sqr()
+    gi = 1.0 / ti.sqrt(1.0 - ti.min(spi_sq / c_sq, 0.99))
+    gj = 1.0 / ti.sqrt(1.0 - ti.min(spj_sq / c_sq, 0.99))
+    Ei = gi * mi * c_sq
+    Ej = gj * mj * c_sq
+    pi_vec = gi * mi * vi
+    pj_vec = gj * mj * vj
+    return (pi_vec + pj_vec) * c_sq / (Ei + Ej + 1e-30)
+
+
+# ── Collision detection (serialized to prevent race conditions) ───────────
 
 
 @ti.kernel
 def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
     n = num_active[None]
+    # Serialized to prevent race conditions: two threads must not annihilate
+    # the same particle simultaneously (B1/B2 fix).
+    ti.loop_config(serialize=True)
     for i in range(n):
         if alive[i] == 0:
             continue
@@ -550,9 +594,9 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     alive[j] = 0
                     ti.atomic_add(annihilation_count_acc[None], 1)
                     center = (pos[i] + pos[j]) * 0.5
-                    mom = mass[i] * vel[i] + mass[j] * vel[j]
-                    parent_vel_c = mom / (mass[i] + mass[j])
-                    inv_m = mass[i] + mass[j]
+                    # Relativistic CM velocity and invariant mass (P2 fix)
+                    parent_vel_c = _cm_velocity(mass[i], vel[i], mass[j], vel[j], c_light)
+                    inv_m = _invariant_mass(mass[i], vel[i], mass[j], vel[j], c_light)
                     v1_ph, v2_ph = cm_decay_2body(inv_m, 0.0, 0.0, parent_vel_c, c_light)
                     d1 = v1_ph.normalized() if v1_ph.norm() > 1e-8 else _random_dir()
                     offset = 0.15
@@ -560,12 +604,12 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     if s1 < MAX_PARTICLES:
                         spawn_queue_pos[s1] = center + d1 * offset
                         spawn_queue_vel[s1] = v1_ph
-                        spawn_queue_type[s1] = 12  # PHOTON
+                        spawn_queue_type[s1] = PHOTON
                     s2 = ti.atomic_add(spawn_count[None], 1)
                     if s2 < MAX_PARTICLES:
                         spawn_queue_pos[s2] = center - d1 * offset
                         spawn_queue_vel[s2] = v2_ph
-                        spawn_queue_type[s2] = 12  # PHOTON
+                        spawn_queue_type[s2] = PHOTON
                     fidx = ti.atomic_add(flash_count[None], 1)
                     if fidx < MAX_FLASHES:
                         flash_render_pos[fidx] = center
@@ -578,40 +622,42 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     alive[j] = 0
                     ti.atomic_add(annihilation_count_acc[None], 1)
                     center = (pos[i] + pos[j]) * 0.5
-                    parent_vel_c = (mass[i] * vel[i] + mass[j] * vel[j]) / (mass[i] + mass[j])
-                    inv_m = mass[i] + mass[j]
+                    # Relativistic CM velocity and invariant mass (P2 fix)
+                    parent_vel_c = _cm_velocity(mass[i], vel[i], mass[j], vel[j], c_light)
+                    inv_m = _invariant_mass(mass[i], vel[i], mass[j], vel[j], c_light)
                     idx_im = ti.atomic_add(inv_mass_head[None], 1) % INV_MASS_BUF
                     inv_mass_buffer[idx_im] = inv_m
-                    pt1 = 20
+                    # Random pion types (C3 fix: named constants)
+                    pt1 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt1 = 18
+                        pt1 = PI_PLUS
                     elif rp < 0.66:
-                        pt1 = 19
-                    pt2 = 20
+                        pt1 = PI_MINUS
+                    pt2 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt2 = 18
+                        pt2 = PI_PLUS
                     elif rp < 0.66:
-                        pt2 = 19
-                    pt3 = 20
+                        pt2 = PI_MINUS
+                    pt3 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt3 = 18
+                        pt3 = PI_PLUS
                     elif rp < 0.66:
-                        pt3 = 19
-                    pt4 = 20
+                        pt3 = PI_MINUS
+                    pt4 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt4 = 18
+                        pt4 = PI_PLUS
                     elif rp < 0.66:
-                        pt4 = 19
-                    pt5 = 20
+                        pt4 = PI_MINUS
+                    pt5 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt5 = 18
+                        pt5 = PI_PLUS
                     elif rp < 0.66:
-                        pt5 = 19
+                        pt5 = PI_MINUS
                     m1 = type_mass[pt1]
                     m2 = type_mass[pt2]
                     m3 = type_mass[pt3]
@@ -662,34 +708,36 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                     alive[j] = 0
                     ti.atomic_add(collision_count_acc[None], 1)
                     center = (pos[i] + pos[j]) * 0.5
-                    parent_vel_c = (mass[i] * vel[i] + mass[j] * vel[j]) / (mass[i] + mass[j])
-                    inv_m = mass[i] + mass[j]
+                    # Relativistic CM velocity and invariant mass (P2 fix)
+                    parent_vel_c = _cm_velocity(mass[i], vel[i], mass[j], vel[j], c_light)
+                    inv_m = _invariant_mass(mass[i], vel[i], mass[j], vel[j], c_light)
                     idx_im = ti.atomic_add(inv_mass_head[None], 1) % INV_MASS_BUF
                     inv_mass_buffer[idx_im] = inv_m
-                    pt1 = 20
+                    # Random pion types (C3 fix: named constants)
+                    pt1 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt1 = 18
+                        pt1 = PI_PLUS
                     elif rp < 0.66:
-                        pt1 = 19
-                    pt2 = 20
+                        pt1 = PI_MINUS
+                    pt2 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt2 = 18
+                        pt2 = PI_PLUS
                     elif rp < 0.66:
-                        pt2 = 19
-                    pt3 = 20
+                        pt2 = PI_MINUS
+                    pt3 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt3 = 18
+                        pt3 = PI_PLUS
                     elif rp < 0.66:
-                        pt3 = 19
-                    pt4 = 20
+                        pt3 = PI_MINUS
+                    pt4 = PI_ZERO
                     rp = ti.random(ti.f32)
                     if rp < 0.33:
-                        pt4 = 18
+                        pt4 = PI_PLUS
                     elif rp < 0.66:
-                        pt4 = 19
+                        pt4 = PI_MINUS
                     m1, m2, m3, m4 = type_mass[pt1], type_mass[pt2], type_mass[pt3], type_mass[pt4]
                     v1, v2, v3, v4 = cm_decay_4body(inv_m, m1, m2, m3, m4, parent_vel_c, c_light)
                     rd1 = _random_dir()
@@ -748,22 +796,23 @@ def detect_collisions(pair_threshold: ti.f32, c_light: ti.f32):
                         if combined_ke > pair_threshold and ti.random(ti.f32) < 0.08:
                             c = (pos[i] + pos[j]) * 0.5
                             rd = _random_dir()
-                            creation_cost = type_mass[0] + type_mass[1]  # e- + e+ rest mass
+                            # e- + e+ rest mass (C3 fix: named constants)
+                            creation_cost = type_mass[ELECTRON] + type_mass[POSITRON]
                             if combined_ke > creation_cost * 2.0:
                                 ke_remain = combined_ke - creation_cost
-                                m_e = type_mass[0]
+                                m_e = type_mass[ELECTRON]
                                 speed = ti.sqrt(ti.max(ke_remain / (m_e + 1e-30), 0.0))
                                 speed = ti.min(speed, c_light * 0.999)
                                 s1 = ti.atomic_add(spawn_count[None], 1)
                                 if s1 < MAX_PARTICLES:
                                     spawn_queue_pos[s1] = c + rd * 0.15
                                     spawn_queue_vel[s1] = rd * speed
-                                    spawn_queue_type[s1] = 0  # electron
+                                    spawn_queue_type[s1] = ELECTRON
                                 s2 = ti.atomic_add(spawn_count[None], 1)
                                 if s2 < MAX_PARTICLES:
                                     spawn_queue_pos[s2] = c - rd * 0.15
                                     spawn_queue_vel[s2] = -rd * speed
-                                    spawn_queue_type[s2] = 1  # positron
+                                    spawn_queue_type[s2] = POSITRON
                                 ti.atomic_add(pair_creation_count_acc[None], 1)
                                 ratio = creation_cost / (combined_ke + 1e-8)
                                 factor = ti.sqrt(ti.max(1.0 - ratio, 0.1))
@@ -1076,7 +1125,7 @@ def record_trails():
 
 
 @ti.kernel
-def _compute_stats(sel_idx: ti.i32):
+def _compute_stats(sel_idx: ti.i32, use_rel: ti.i32, c_light: ti.f32):
     n = num_active[None]
     ke = ti.cast(0.0, ti.f32)
     mx = ti.cast(0.0, ti.f32)
@@ -1091,8 +1140,19 @@ def _compute_stats(sel_idx: ti.i32):
             continue
         speed_sq = vel[i].norm_sqr()
         spd = ti.sqrt(speed_sq)
-        ti.atomic_add(ke, 0.5 * mass[i] * speed_sq)
-        p = mass[i] * vel[i]
+        # Relativistic Lorentz factor (P1 fix)
+        gamma = 1.0
+        if use_rel == 1 and c_light > 0.0:
+            c_sq = c_light * c_light
+            beta_sq = speed_sq / c_sq
+            gamma = 1.0 / ti.sqrt(1.0 - ti.min(beta_sq, 0.99))
+            # Relativistic KE: (γ−1)mc²
+            ti.atomic_add(ke, (gamma - 1.0) * mass[i] * c_sq)
+        else:
+            # Non-relativistic KE: ½mv²
+            ti.atomic_add(ke, 0.5 * mass[i] * speed_sq)
+        # Relativistic momentum: p = γmv
+        p = gamma * mass[i] * vel[i]
         ti.atomic_add(mx, p[0])
         ti.atomic_add(my, p[1])
         ti.atomic_add(mz, p[2])
@@ -1127,7 +1187,16 @@ def _compute_stats(sel_idx: ti.i32):
         stats[_S_SEL + 6] = mass[sel_idx]
         stats[_S_SEL + 7] = charge[sel_idx]
         stats[_S_SEL + 8] = ti.cast(ptype[sel_idx], ti.f32)
-        stats[_S_SEL + 9] = 0.5 * mass[sel_idx] * vel[sel_idx].norm_sqr()
+        # Relativistic KE for selected particle (P1 fix)
+        sel_speed_sq = vel[sel_idx].norm_sqr()
+        sel_gamma = 1.0
+        if use_rel == 1 and c_light > 0.0:
+            sel_c_sq = c_light * c_light
+            sel_beta_sq = sel_speed_sq / sel_c_sq
+            sel_gamma = 1.0 / ti.sqrt(1.0 - ti.min(sel_beta_sq, 0.99))
+            stats[_S_SEL + 9] = (sel_gamma - 1.0) * mass[sel_idx] * sel_c_sq
+        else:
+            stats[_S_SEL + 9] = 0.5 * mass[sel_idx] * sel_speed_sq
         stats[_S_SEL + 10] = ti.cast(frozen[sel_idx], ti.f32)
         stats[_S_SEL + 11] = vel[sel_idx].norm()
 
@@ -1456,8 +1525,9 @@ def do_maintenance(dt):
         _do_compact(_compact_count[None])
 
 
-def refresh_stats(sel_idx=0):
-    _compute_stats(sel_idx)
+def refresh_stats(sel_idx=0, use_rel=False, c_light=30.0):
+    use_rel_i = 1 if use_rel else 0
+    _compute_stats(sel_idx, use_rel_i, c_light)
     s = stats.to_numpy()
     cached_stats["ke"] = float(s[0])
     cached_stats["mom"] = float((s[1] ** 2 + s[2] ** 2 + s[3] ** 2) ** 0.5)

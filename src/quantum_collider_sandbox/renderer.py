@@ -1,8 +1,10 @@
 """Taichi UI window, camera, particle rendering, trails, and ImGui controls."""
 
+import json
 import math
 import random
 import time
+from pathlib import Path
 
 import taichi as ti
 
@@ -125,6 +127,11 @@ class Renderer:
         self._bh_ring_dirty = True
         self._disk_initialized = False
 
+        # Particle count control
+        self.particle_count_target = 1000
+        self._particle_count_prev = self.particle_count_target
+        self._load_particle_count_config()
+
         sim.init_bg_stars()
 
         self.boundary_modes = ["reflect", "periodic", "none"]
@@ -141,6 +148,41 @@ class Renderer:
         self.frame_count = 0
         self._preset_keys_prev = [False] * 11
         self._preset_idx = 0
+
+    def _get_particle_config_path(self) -> Path:
+        """Get path to particle count config file."""
+        project_root = Path(__file__).resolve().parent.parent.parent
+        return project_root / ".particle_config.json"
+
+    def _load_particle_count_config(self) -> None:
+        """Load saved particle count preference from config file."""
+        config_path = self._get_particle_config_path()
+        if config_path.exists():
+            try:
+                with open(config_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                    self.particle_count_target = max(
+                        1, min(data.get("particle_count", 1000), 50000)
+                    )
+            except (OSError, json.JSONDecodeError):
+                self.particle_count_target = 1000
+        self._particle_count_prev = self.particle_count_target
+
+    def _save_particle_count_config(self) -> None:
+        """Save particle count preference to config file."""
+        config_path = self._get_particle_config_path()
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump({"particle_count": self.particle_count_target}, f)
+        except OSError:
+            pass  # Silently fail if can't write config
+
+    def _update_particle_count(self) -> None:
+        """Apply particle count changes if slider was modified."""
+        if self.particle_count_target != self._particle_count_prev:
+            sim.set_particle_count(self.particle_count_target)
+            self._particle_count_prev = self.particle_count_target
+            self._save_particle_count_config()
 
     def _presets(self):
         """Return list of preset methods (0-9). Key 1=Default, 2=Rutherford, ..., 0=N-body."""
@@ -529,7 +571,17 @@ class Renderer:
                 self._bh_ring_dirty = True
                 self._disk_initialized = False
 
-        with self.gui.sub_window("Spawn", 0.0, 0.90, 0.20, 0.095) as w:
+        with self.gui.sub_window("Spawn & Particles", 0.0, 0.75, left_panel_width, 0.22) as w:
+            # Particle count control
+            self.particle_count_target = w.slider_int(
+                "Part.Count", self.particle_count_target, 1, 50000
+            )
+            self._update_particle_count()
+            current_n = sim.num_active[None]
+            w.text(f"  Current: {current_n}")
+            w.text("")
+
+            # Spawn controls
             spawn_idx = (
                 self._spawn_ids.index(self.spawn_type) if self.spawn_type in self._spawn_ids else 0
             )
@@ -670,6 +722,7 @@ class Renderer:
             bh_rs,
             bh_pos_tup,
             hide_photons=not self.show_photons,
+            show_trails=self.show_trails,
         )
 
         self.scene.particles(

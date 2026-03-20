@@ -7,14 +7,14 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 EXPORT_DIR = _PROJECT_ROOT / "data" / "exports"
 
-MAX_PARTICLES = 100
-TRAIL_LENGTH = 1000
+MAX_PARTICLES = 1000
+TRAIL_LENGTH = 40  # Reduced from 400 for performance; still ~10 segments visible
 
 DT = 0.001  # smaller = smoother; use 0.002 for faster playback
-SUBSTEPS = 4
+SUBSTEPS = 2
 COULOMB_K = 40.0
 GRAVITY_G = 6.0
-SOFTENING = 0.05
+SOFTENING = 0.08
 CUTOFF_RADIUS = 15.0
 
 MAGNETIC_FIELD = (0.0, 0.0, 2.0)
@@ -53,6 +53,11 @@ BACKGROUND_COLOR = (0.01, 0.01, 0.03)
 BASE_PARTICLE_RADIUS = 0.12
 PARTICLE_RADIUS_SCALE = 0.45
 TRAIL_WIDTH = 2.0
+
+# ── Trail Optimization ───────────────────────────────────────────────────
+TRAILS_ENABLED_DEFAULT = True  # Can be toggled in UI (T key)
+MIN_TRAIL_SPEED_FOR_RENDER = 0.1  # Skip trails for particles moving slower than this
+MIN_TRAIL_LENGTH_FOR_RENDER = 3  # Skip trails with fewer than 3 segments
 
 # Collision flash alpha (0–1). Lower = more transparent, particles visible through flashes.
 FLASH_OPACITY = 0.1

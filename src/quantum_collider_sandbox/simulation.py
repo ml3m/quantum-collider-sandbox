@@ -1,6 +1,8 @@
 # pylint: disable=C0302 disable=C0103
 """Taichi-based GPU physics simulation: forces, collisions, decays, black hole."""
 
+import random
+
 import h5py
 import numpy as np
 import taichi as ti
@@ -12,6 +14,8 @@ from .config import (
     FLASH_OPACITY,
     MAX_PARTICLES,
     MAX_VELOCITY,
+    MIN_TRAIL_LENGTH_FOR_RENDER,
+    MIN_TRAIL_SPEED_FOR_RENDER,
     MIN_VELOCITY,
     NUM_TYPES,
     SOFTENING,
@@ -31,6 +35,7 @@ from .particles import (
     type_radius,
 )
 from .pdg_table import ELECTRON, PHOTON, PI_MINUS, PI_PLUS, PI_ZERO, POSITRON
+from .pdg_table import PARTICLES as PDG_PARTICLES
 
 MAX_FLASHES = 256
 INV_MASS_BUF = 64
@@ -117,6 +122,21 @@ _compact_src = ti.field(dtype=ti.i32, shape=MAX_PARTICLES)
 _compact_count = ti.field(dtype=ti.i32, shape=())
 _needs_compact = ti.field(dtype=ti.i32, shape=())
 
+# ── Spatial grid for force computation (Phase 2) ───────────────────────
+# Grid parameters: cell_size = CUTOFF_RADIUS / 2; grid_dim = 4 => 4³ = 64 cells
+GRID_DIM = 4
+GRID_SIZE = GRID_DIM * GRID_DIM * GRID_DIM  # 64 total cells
+GRID_CELL_SIZE = CUTOFF_RADIUS * 0.5  # 7.5, covers roughly 2×2 particles per cell dimension
+# Grid bounds: domain is [-BOUNDARY_SIZE, BOUNDARY_SIZE]³, but we'll use [-12, 12]
+GRID_MIN = -12.0
+GRID_MAX = 12.0
+
+grid_cell_head = ti.field(
+    dtype=ti.i32, shape=GRID_SIZE
+)  # Head of linked list per cell (-1 if empty)
+grid_next = ti.field(dtype=ti.i32, shape=MAX_PARTICLES)  # Next particle in linked list
+grid_cell_id = ti.field(dtype=ti.i32, shape=MAX_PARTICLES)  # Which grid cell each particle is in
+
 cached_stats = {}
 time_series = {
     "step": [],
@@ -202,6 +222,44 @@ def _clear_all():
         inv_mass_buffer[i] = 0.0
 
 
+# ── Spatial grid helper functions ────────────────────────────────────────
+
+
+@ti.func
+def _pos_to_grid_id(p: ti.template()) -> ti.i32:
+    """Map a position to a grid cell ID. Returns -1 if out of bounds."""
+    # Normalize to [0, 1] within grid bounds
+    norm_x = (p[0] - GRID_MIN) / (GRID_MAX - GRID_MIN)
+    norm_y = (p[1] - GRID_MIN) / (GRID_MAX - GRID_MIN)
+    norm_z = (p[2] - GRID_MIN) / (GRID_MAX - GRID_MIN)
+
+    # Clamp to [0, GRID_DIM-1]
+    ix = ti.min(ti.max(ti.cast(norm_x * GRID_DIM, ti.i32), 0), GRID_DIM - 1)
+    iy = ti.min(ti.max(ti.cast(norm_y * GRID_DIM, ti.i32), 0), GRID_DIM - 1)
+    iz = ti.min(ti.max(ti.cast(norm_z * GRID_DIM, ti.i32), 0), GRID_DIM - 1)
+
+    return ix + iy * GRID_DIM + iz * GRID_DIM * GRID_DIM
+
+
+@ti.kernel
+def build_grid():
+    """Build the spatial grid by binning particles into cells."""
+    # Clear grid cell heads
+    for cell in grid_cell_head:
+        grid_cell_head[cell] = -1
+
+    n = num_active[None]
+    # Bin particles: for each particle, insert into linked list at cell head
+    for i in range(n):
+        if alive[i] == 0:
+            continue
+        cell_id = _pos_to_grid_id(pos[i])
+        grid_cell_id[i] = cell_id
+        # Insert at head of cell's linked list
+        grid_next[i] = grid_cell_head[cell_id]
+        grid_cell_head[cell_id] = i
+
+
 def init_simulation() -> None:
     """Initialize or reset the simulation state."""
     _clear_all()
@@ -229,6 +287,44 @@ def add_particle(position, velocity, particle_type, is_frozen=False):  # noqa: P
     trail_count[idx] = 0
     num_active[None] = n + 1
     return idx
+
+
+def _spawn_random_particles_internal(count: int) -> None:
+    """Spawn N random particles from the PDG catalog. Internal helper for set_particle_count."""
+    type_ids = list(PDG_PARTICLES.keys())
+    for _ in range(count):
+        tid = random.choice(type_ids)
+        px = random.uniform(-6, 6)
+        py = random.uniform(-6, 6)
+        pz = random.uniform(-3, 3)
+        vx = random.uniform(-3, 3)
+        vy = random.uniform(-3, 3)
+        vz = random.uniform(-1, 1)
+        add_particle((px, py, pz), (vx, vy, vz), tid)
+
+
+def set_particle_count(target_count: int) -> None:
+    """Adjust particle count to target: spawn random particles if needed, or despawn extras.
+    Used for interactive particle count control in UI."""
+    current_count = num_active[None]
+    target_count = max(0, min(target_count, MAX_PARTICLES))
+
+    if target_count > current_count:
+        # Spawn random particles
+        num_to_spawn = target_count - current_count
+        _spawn_random_particles_internal(num_to_spawn)
+    elif target_count < current_count:
+        # Despawn excess particles by marking alive as 0 and compacting
+        excess_count = current_count - target_count
+        despawned = 0
+        for i in range(num_active[None] - 1, -1, -1):
+            if despawned >= excess_count:
+                break
+            if alive[i] == 1:
+                alive[i] = 0
+                despawned += 1
+        # Compact to clean up dead particles
+        _do_compact(target_count)
 
 
 @ti.kernel
@@ -263,25 +359,51 @@ def compute_forces(
         qi = charge[i]
         mi = mass[i]
         pi = pos[i]
-        for j in range(n):
-            if i == j or alive[j] == 0:
-                continue
-            diff = pos[j] - pi
-            dist_sq = diff.dot(diff) + SOFTENING * SOFTENING
-            dist = ti.sqrt(dist_sq)
-            if dist > CUTOFF_RADIUS:
-                continue
-            direction = diff / dist
-            if coulomb_k != 0.0:
-                f -= coulomb_k * qi * charge[j] / dist_sq * direction
-            if gravity_g > 0.0:
-                f += gravity_g * mi * mass[j] / dist_sq * direction
-            if strong_k > 0.0 and dist < strong_range:
-                bi = type_is_baryon[ptype[i]]
-                bj = type_is_baryon[ptype[j]]
-                if bi == 1 and bj == 1:
-                    yukawa = -strong_k * ti.exp(-dist / (strong_range * 0.3)) / (dist + 0.01)
-                    f += yukawa * direction
+        cell_id = grid_cell_id[i]
+
+        # Unpack cell coordinates from cell_id
+        iz = cell_id // (GRID_DIM * GRID_DIM)
+        rem = cell_id % (GRID_DIM * GRID_DIM)
+        iy = rem // GRID_DIM
+        ix = rem % GRID_DIM
+
+        # Iterate over particle i and its 26 neighbor cells (3×3×3 - 1 center)
+        for dix in range(-1, 2):
+            for diy in range(-1, 2):
+                for diz in range(-1, 2):
+                    nix = ix + dix
+                    niy = iy + diy
+                    niz = iz + diz
+                    # Check bounds
+                    if 0 <= nix < GRID_DIM and 0 <= niy < GRID_DIM and 0 <= niz < GRID_DIM:
+                        neighbor_id = nix + niy * GRID_DIM + niz * GRID_DIM * GRID_DIM
+                        # Follow linked list in neighbor cell
+                        j = grid_cell_head[neighbor_id]
+                        while j != -1:
+                            if i != j and alive[j] == 1:
+                                diff = pos[j] - pi
+                                diff_sq = diff.dot(diff)
+                                # Early exit: skip sqrt for distant pairs
+                                cutoff_sq = CUTOFF_RADIUS * CUTOFF_RADIUS
+                                if diff_sq <= cutoff_sq:
+                                    dist_sq = diff_sq + SOFTENING * SOFTENING
+                                    dist = ti.sqrt(dist_sq)
+                                    direction = diff / dist
+                                    if coulomb_k != 0.0:
+                                        f -= coulomb_k * qi * charge[j] / dist_sq * direction
+                                    if gravity_g > 0.0:
+                                        f += gravity_g * mi * mass[j] / dist_sq * direction
+                                    if strong_k > 0.0 and dist < strong_range:
+                                        bi = type_is_baryon[ptype[i]]
+                                        bj = type_is_baryon[ptype[j]]
+                                        if bi == 1 and bj == 1:
+                                            yukawa = (
+                                                -strong_k
+                                                * ti.exp(-dist / (strong_range * 0.3))
+                                                / (dist + 0.01)
+                                            )
+                                            f += yukawa * direction
+                            j = grid_next[j]
 
         if has_e:
             f += qi * e_field
@@ -1265,11 +1387,28 @@ def build_trail_lines(
     for i in range(n):
         if alive[i] == 0:
             continue
+
+        # Skip photons (decay too quickly, trails clutter view)
+        if ptype[i] == PHOTON:
+            continue
+
+        # Skip frozen/immobile particles (no visual motion to trail)
+        if frozen[i] == 1:
+            continue
+
+        # Skip particles moving below threshold (trails don't provide info for slow movers)
+        speed = vel[i].norm()
+        if speed < MIN_TRAIL_SPEED_FOR_RENDER:
+            continue
+
         if hide_photons == 1 and ptype[i] == PHOTON:
             continue
+
         tc = trail_count[i]
-        if tc < 2:
+        # Skip trails too short to be visually meaningful
+        if tc < MIN_TRAIL_LENGTH_FOR_RENDER:
             continue
+
         head = trail_head[i]
         pt = ptype[i]
         base_color = type_color[pt]
@@ -1477,6 +1616,7 @@ def step(
     use_leapfrog = _config.INTEGRATOR == "leapfrog"
 
     # 1. Forces, 2. Half-kick + drift (Leapfrog) or full Euler step
+    build_grid()  # Phase 2: build spatial grid for force acceleration
     _call_forces(
         coulomb_k, gravity_g, mag_field, e_field, strong_k, strong_range, bh_i, bh_gm, bh_rs, bh_pos
     )
@@ -1501,6 +1641,7 @@ def step(
 
     # 8. Leapfrog second half: forces (include new particles), half-kick, no drift
     if use_leapfrog:
+        build_grid()  # Phase 2: rebuild grid before second force pass
         _call_forces(
             coulomb_k,
             gravity_g,
@@ -1575,12 +1716,19 @@ def refresh_stats(sel_idx=0, use_rel=False, c_light=30.0):
 
 
 def prepare_render(
-    base_r, r_scale, bh_on=False, bh_rs=0.0, bh_pos=(0.0, 0.0, 0.0), hide_photons=False
+    base_r,
+    r_scale,
+    bh_on=False,
+    bh_rs=0.0,
+    bh_pos=(0.0, 0.0, 0.0),
+    hide_photons=False,
+    show_trails=True,
 ):
     bh_i = 1 if bh_on else 0
     hp = 1 if hide_photons else 0
     build_render_data(base_r, r_scale, bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2], hp)
-    build_trail_lines(bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2], hp)
+    if show_trails:
+        build_trail_lines(bh_i, bh_rs, bh_pos[0], bh_pos[1], bh_pos[2], hp)
     if bh_on:
         bh_eh_pos[0] = ti.Vector([bh_pos[0], bh_pos[1], bh_pos[2]])
         bh_eh_color[0] = ti.Vector([0.0, 0.0, 0.0])

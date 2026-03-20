@@ -18,11 +18,12 @@ repos:
       - id: pylint
         name: pylint
         entry: pylint --fail-on=C,R,W src/quantum_collider_sandbox
-        language: system
+        language: python
+        additional_dependencies: ['pylint']
         pass_filenames: false
       - id: pytest
         name: pytest
-        entry: bash -c 'ROOT=$(git rev-parse --show-toplevel) && cd "$ROOT" && [ -x venv/bin/python ] && export PATH="$ROOT/venv/bin:$PATH"; make test-cov'
+        entry: bash -c 'make test'
         language: system
         pass_filenames: false
         always_run: true

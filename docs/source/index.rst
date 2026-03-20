@@ -34,6 +34,7 @@ Documentation
    :caption: Contents
 
    parameters
+   contact
 
 Indices and tables
 ------------------

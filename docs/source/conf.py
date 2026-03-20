@@ -9,7 +9,7 @@
 project = 'Quantum Collider Sandbox'
 copyright = '2026, ml3m'
 author = 'ml3m'
-release = '1.0.4'
+release = '1.1.0'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

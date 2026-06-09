@@ -120,27 +120,28 @@ For contributing to the codebase:
 Taichi Backend Configuration
 =============================
 
-By default, Taichi uses Vulkan. To use a different backend:
+By default, the app starts with Vulkan. To use a different backend, set
+``QUANTUM_COLLIDER_ARCH`` before launching:
 
 **CUDA (NVIDIA GPUs):**
 
 .. code-block:: bash
 
-   export TAICHI_BACKEND=cuda
+   export QUANTUM_COLLIDER_ARCH=cuda
    python -m quantum_collider_sandbox
 
 **CPU (for debugging):**
 
 .. code-block:: bash
 
-   export TAICHI_BACKEND=cpu
+   export QUANTUM_COLLIDER_ARCH=cpu
    python -m quantum_collider_sandbox
 
-**Metal (macOS, if available):**
+**Auto-detect preferred GPU backend:**
 
 .. code-block:: bash
 
-   export TAICHI_BACKEND=metal
+   export QUANTUM_COLLIDER_ARCH=gpu
    python -m quantum_collider_sandbox
 
 
@@ -161,19 +162,25 @@ Makefile Targets
      - Install package in editable mode with dev dependencies
 
    * - ``make test``
-     - Run pytest (27 physics & logic tests)
+     - Run pytest test suite
 
    * - ``make lint``
-     - Run pylint, ruff, black (code quality)
+     - Run pylint on source code
+
+   * - ``make test-cov``
+     - Run pytest with coverage report
+
+   * - ``make format-check``
+     - Run ruff + black format checks
+
+   * - ``make format``
+     - Auto-fix formatting with ruff + black
 
    * - ``make docs``
      - Build Sphinx documentation
 
    * - ``make prod-ready``
-     - Run all checks: lint, test, docs (pre-commit)
-
-   * - ``make clean``
-     - Remove build artifacts and cache
+     - Run format-check, lint, and coverage tests
 
 
 Troubleshooting
@@ -199,7 +206,7 @@ If Taichi cannot find your GPU:
    
    .. code-block:: bash
 
-      export TAICHI_BACKEND=cpu
+      export QUANTUM_COLLIDER_ARCH=cpu
       python -m quantum_collider_sandbox
 
 **"ImportError: cannot import taichi"**
@@ -236,4 +243,3 @@ Getting Help
 - **Issues:** https://github.com/ml3m/quantum-collider-sandbox/issues
 - **Quick test:** Run ``make test`` to verify physics engine
 - **Debug mode:** Check console output for Taichi warnings
-

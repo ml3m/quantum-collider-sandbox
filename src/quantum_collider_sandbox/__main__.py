@@ -41,7 +41,6 @@ Controls:
 import argparse
 import json
 import os
-import random
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -65,11 +64,9 @@ from .pdg_table import (
     POSITRON,
     PROTON,
 )
-from .pdg_table import (
-    PARTICLES as PDG_PARTICLES,
-)
 from .renderer import Renderer
 from .simulation import (
+    _spawn_random_particles_internal,
     add_particle,
     cached_stats,
     do_maintenance,
@@ -97,16 +94,7 @@ def _setup_demo() -> None:
 
 def _spawn_random_particles(count: int) -> None:
     """Spawn N random particles from the PDG catalog."""
-    type_ids = list(PDG_PARTICLES.keys())
-    for _ in range(count):
-        tid = random.choice(type_ids)
-        px = random.uniform(-6, 6)
-        py = random.uniform(-6, 6)
-        pz = random.uniform(-3, 3)
-        vx = random.uniform(-3, 3)
-        vy = random.uniform(-3, 3)
-        vz = random.uniform(-1, 1)
-        add_particle((px, py, pz), (vx, vy, vz), tid)
+    _spawn_random_particles_internal(count)
 
 
 def main() -> None:
